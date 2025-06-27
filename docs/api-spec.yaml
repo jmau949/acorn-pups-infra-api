@@ -1,0 +1,825 @@
+openapi: 3.0.3
+info:
+  title: Acorn Pups API
+  description: |
+    REST API for managing Acorn Pups devices and user interactions.
+    
+    This API provides endpoints for:
+    - Device registration and management
+    - User access control
+    - Button press history and notifications
+    - Health monitoring
+    
+    ## Authentication
+    Most endpoints require authentication via AWS Cognito JWT tokens.
+    Include the token in the Authorization header: `Bearer <token>`
+    
+    ## Rate Limiting
+    - Development: 100 requests/second, 200 burst
+    - Production: 1000 requests/second, 2000 burst
+    
+  version: 1.0.0
+  contact:
+    name: Acorn Pups Team
+    email: api@acornpups.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api-dev.acornpups.com
+    description: Development server
+  - url: https://api.acornpups.com
+    description: Production server
+
+security:
+  - CognitoAuth: []
+
+paths:
+  /health:
+    get:
+      summary: Health check endpoint
+      description: Returns API health status and basic information
+      tags:
+        - System
+      security: [] # No authentication required
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '500':
+          description: API is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /devices/register:
+    post:
+      summary: Register a new device
+      description: Register a new Acorn Pups device for the authenticated user
+      tags:
+        - Device Management
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceRegistrationRequest'
+      responses:
+        '201':
+          description: Device registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceRegistrationResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Device already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/{userId}/devices:
+    get:
+      summary: Get user's devices
+      description: Retrieve all devices accessible by the specified user
+      tags:
+        - Device Management
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: User ID
+      responses:
+        '200':
+          description: List of user's devices
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDevicesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /devices/{deviceId}/settings:
+    put:
+      summary: Update device settings
+      description: Update configuration settings for a specific device
+      tags:
+        - Device Management
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Device ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceSettingsRequest'
+      responses:
+        '200':
+          description: Settings updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceSettingsResponse'
+        '400':
+          description: Invalid settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Device not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /devices/{deviceId}:
+    delete:
+      summary: Delete a device
+      description: Remove a device and all associated data
+      tags:
+        - Device Management
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Device ID
+      responses:
+        '204':
+          description: Device deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Device not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /devices/{deviceId}/status:
+    get:
+      summary: Get device status
+      description: Get current connectivity and status of a device
+      tags:
+        - Device Management
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Device ID
+      responses:
+        '200':
+          description: Device status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Device not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /devices/{deviceId}/history:
+    get:
+      summary: Get device button press history
+      description: Retrieve button press history for a device
+      tags:
+        - Device Management
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Device ID
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+          description: Maximum number of records to return
+        - name: startTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Start time for history query (ISO 8601)
+        - name: endTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: End time for history query (ISO 8601)
+      responses:
+        '200':
+          description: Button press history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceHistoryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Device not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /devices/{deviceId}/invite:
+    post:
+      summary: Invite user to device
+      description: Send an invitation to a user to access a device
+      tags:
+        - User Management
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Device ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserInviteRequest'
+      responses:
+        '201':
+          description: Invitation sent successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserInviteResponse'
+        '400':
+          description: Invalid invitation request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Device not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /devices/{deviceId}/users:
+    get:
+      summary: Get device users
+      description: Get all users with access to a device
+      tags:
+        - User Management
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Device ID
+      responses:
+        '200':
+          description: List of users with device access
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceUsersResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Device not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /devices/{deviceId}/users/{userId}:
+    delete:
+      summary: Remove user access from device
+      description: Remove a user's access to a device
+      tags:
+        - User Management
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Device ID
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: User ID to remove
+      responses:
+        '204':
+          description: User access removed successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Device or user not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/{userId}/preferences:
+    put:
+      summary: Update user preferences
+      description: Update notification and app preferences for a user
+      tags:
+        - User Management
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: User ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserPreferencesRequest'
+      responses:
+        '200':
+          description: Preferences updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPreferencesResponse'
+        '400':
+          description: Invalid preferences
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+components:
+  securitySchemes:
+    CognitoAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: AWS Cognito JWT token
+
+  responses:
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Unauthorized"
+            message: "Authentication required"
+            requestId: "abc-123-def"
+    
+    Forbidden:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Forbidden"
+            message: "Insufficient permissions"
+            requestId: "abc-123-def"
+
+  schemas:
+    SuccessResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          description: Response data
+        requestId:
+          type: string
+          description: Unique request identifier
+      required:
+        - data
+        - requestId
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error code
+        message:
+          type: string
+          description: Human-readable error message
+        requestId:
+          type: string
+          description: Unique request identifier
+      required:
+        - error
+        - message
+        - requestId
+
+    HealthResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [healthy, unhealthy]
+                timestamp:
+                  type: string
+                  format: date-time
+                environment:
+                  type: string
+                version:
+                  type: string
+                region:
+                  type: string
+                checks:
+                  type: object
+                  properties:
+                    api:
+                      type: boolean
+                    lambda:
+                      type: boolean
+
+    DeviceRegistrationRequest:
+      type: object
+      properties:
+        deviceId:
+          type: string
+          description: Unique device identifier
+          example: "ACORN_001_ABC123"
+        deviceName:
+          type: string
+          description: Human-readable device name
+          example: "Buddy's Button"
+        deviceType:
+          type: string
+          description: Device model/type
+          example: "acorn-button-v1"
+        userId:
+          type: string
+          description: Owner user ID
+          example: "user-123"
+      required:
+        - deviceId
+        - deviceName
+        - deviceType
+        - userId
+
+    DeviceRegistrationResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                deviceId:
+                  type: string
+                deviceName:
+                  type: string
+                deviceType:
+                  type: string
+                ownerId:
+                  type: string
+                registeredAt:
+                  type: string
+                  format: date-time
+                status:
+                  type: string
+                  enum: [pending, active]
+
+    Device:
+      type: object
+      properties:
+        deviceId:
+          type: string
+        deviceName:
+          type: string
+        deviceType:
+          type: string
+        status:
+          type: string
+          enum: [online, offline, pending]
+        lastSeen:
+          type: string
+          format: date-time
+        registeredAt:
+          type: string
+          format: date-time
+        settings:
+          $ref: '#/components/schemas/DeviceSettings'
+
+    DeviceSettings:
+      type: object
+      properties:
+        buttonSensitivity:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: Button sensitivity level (1-10)
+        notificationPreferences:
+          type: object
+          properties:
+            pushEnabled:
+              type: boolean
+            emailEnabled:
+              type: boolean
+
+    UserDevicesResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                devices:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Device'
+                total:
+                  type: integer
+
+    DeviceSettingsRequest:
+      type: object
+      properties:
+        buttonSensitivity:
+          type: integer
+          minimum: 1
+          maximum: 10
+        notificationPreferences:
+          type: object
+          properties:
+            pushEnabled:
+              type: boolean
+            emailEnabled:
+              type: boolean
+
+    DeviceSettingsResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/DeviceSettings'
+
+    DeviceStatusResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                deviceId:
+                  type: string
+                status:
+                  type: string
+                  enum: [online, offline, pending]
+                lastSeen:
+                  type: string
+                  format: date-time
+                batteryLevel:
+                  type: integer
+                  minimum: 0
+                  maximum: 100
+                signalStrength:
+                  type: integer
+                  minimum: -100
+                  maximum: 0
+                firmwareVersion:
+                  type: string
+
+    ButtonPress:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        duration:
+          type: integer
+          description: Press duration in milliseconds
+        batteryLevel:
+          type: integer
+          minimum: 0
+          maximum: 100
+        signalStrength:
+          type: integer
+          minimum: -100
+          maximum: 0
+
+    DeviceHistoryResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                deviceId:
+                  type: string
+                presses:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/ButtonPress'
+                total:
+                  type: integer
+                hasMore:
+                  type: boolean
+
+    UserInviteRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          description: Email address of user to invite
+        role:
+          type: string
+          enum: [owner, viewer]
+          description: Access level for the invited user
+      required:
+        - email
+        - role
+
+    UserInviteResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                inviteId:
+                  type: string
+                email:
+                  type: string
+                role:
+                  type: string
+                status:
+                  type: string
+                  enum: [pending, accepted, expired]
+                expiresAt:
+                  type: string
+                  format: date-time
+
+    DeviceUser:
+      type: object
+      properties:
+        userId:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [owner, viewer]
+        addedAt:
+          type: string
+          format: date-time
+        lastActive:
+          type: string
+          format: date-time
+
+    DeviceUsersResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                deviceId:
+                  type: string
+                users:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/DeviceUser'
+                total:
+                  type: integer
+
+    UserPreferencesRequest:
+      type: object
+      properties:
+        notifications:
+          type: object
+          properties:
+            pushEnabled:
+              type: boolean
+            emailEnabled:
+              type: boolean
+            quietHours:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                startTime:
+                  type: string
+                  pattern: '^([01]?[0-9]|2[0-3]):[0-5][0-9]$'
+                  example: "22:00"
+                endTime:
+                  type: string
+                  pattern: '^([01]?[0-9]|2[0-3]):[0-5][0-9]$'
+                  example: "08:00"
+        app:
+          type: object
+          properties:
+            theme:
+              type: string
+              enum: [light, dark, auto]
+            language:
+              type: string
+              example: "en-US"
+
+    UserPreferencesResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                userId:
+                  type: string
+                notifications:
+                  type: object
+                app:
+                  type: object
+                updatedAt:
+                  type: string
+                  format: date-time
+
+tags:
+  - name: System
+    description: System health and status endpoints
+  - name: Device Management
+    description: Device registration, settings, and status
+  - name: User Management
+    description: User access control and preferences 

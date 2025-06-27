@@ -1,0 +1,20 @@
+{
+  "name": "acorn-pups-shared-lambda",
+  "version": "1.0.0",
+  "description": "Shared utilities for Acorn Pups Lambda functions",
+  "main": "response-handler.js",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.119",
+    "@types/node": "^22.0.0",
+    "typescript": "~5.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist *.js *.d.ts"
+  }
+} 

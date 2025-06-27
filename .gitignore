@@ -134,4 +134,42 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# CDK specific
+cdk.out/
+cdk.context.json
+.cdk.staging/
+*.d.ts
+*.js
+*.js.map
+
+# AWS specific
+.aws/
+aws-exports.js
+
+# Lambda build artifacts
+lambda/**/node_modules/
+lambda/**/*.js
+lambda/**/*.js.map
+lambda/**/*.d.ts
+
+# IDE specific
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage/
+.coverage/
+junit.xml
+
+# PowerShell specific
+*.ps1.bak
+
+# Requirements files (project specific)
 req*

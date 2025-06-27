@@ -1,0 +1,22 @@
+{
+  "name": "acorn-pups-get-device-history-lambda",
+  "version": "1.0.0",
+  "description": "Get device history Lambda function for Acorn Pups API",
+  "main": "index.js",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@aws-sdk/client-ssm": "^3.400.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.119",
+    "@types/node": "^22.0.0",
+    "typescript": "~5.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist *.js *.d.ts"
+  }
+} 

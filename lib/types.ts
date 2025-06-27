@@ -1,0 +1,78 @@
+import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as apigateway from 'aws-cdk-lib/aws-apigateway';
+import { StackProps } from 'aws-cdk-lib';
+
+export interface BaseStackProps extends StackProps {
+  environment: string;
+  apiGatewayStageName: string;
+  domainPrefix: string;
+  logLevel: string;
+  throttleRateLimit: number;
+  throttleBurstLimit: number;
+}
+
+export interface LambdaStackProps extends BaseStackProps {}
+
+export interface ApiGatewayStackProps extends BaseStackProps {
+  lambdaFunctions: LambdaFunctions;
+}
+
+export interface MonitoringStackProps extends BaseStackProps {
+  apiGateway: apigateway.RestApi;
+  lambdaFunctions: LambdaFunctions;
+}
+
+export interface PipelineStackProps extends StackProps {
+  repositoryName: string;
+  branch: string;
+}
+
+export interface LambdaFunctions {
+  // Health and System
+  healthCheck: lambda.Function;
+  
+  // Device Management
+  registerDevice: lambda.Function;
+  getUserDevices: lambda.Function;
+  updateDeviceSettings: lambda.Function;
+  deleteDevice: lambda.Function;
+  getDeviceStatus: lambda.Function;
+  getDeviceHistory: lambda.Function;
+  
+  // User Management  
+  inviteUser: lambda.Function;
+  removeUser: lambda.Function;
+  getDeviceUsers: lambda.Function;
+  updateUserPreferences: lambda.Function;
+}
+
+export interface ApiErrorResponse {
+  error: string;
+  message: string;
+  requestId: string;
+}
+
+export interface ApiSuccessResponse<T = any> {
+  data: T;
+  requestId: string;
+}
+
+export interface DeviceRegistrationRequest {
+  deviceId: string;
+  deviceName: string;
+  deviceType: string;
+  userId: string;
+}
+
+export interface DeviceSettingsRequest {
+  buttonSensitivity?: number;
+  notificationPreferences?: {
+    pushEnabled: boolean;
+    emailEnabled: boolean;
+  };
+}
+
+export interface UserInviteRequest {
+  email: string;
+  role: 'owner' | 'viewer';
+} 
