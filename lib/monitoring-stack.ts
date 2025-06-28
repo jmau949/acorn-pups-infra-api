@@ -15,7 +15,7 @@ export class MonitoringStack extends cdk.Stack {
     super(scope, id, props);
 
     // Add project tags to all resources in this stack
-    cdk.Tags.of(this).add('Project', 'Acorn Pups');
+    cdk.Tags.of(this).add('Project', 'acorn-pups');
     cdk.Tags.of(this).add('Environment', props.environment);
     cdk.Tags.of(this).add('Component', 'Monitoring');
 
