@@ -68,7 +68,7 @@ aws sts get-caller-identity
 ### **3. Bootstrap CDK (One-time setup per AWS account/region)**
 ```powershell
 # Bootstrap for your target region
-cdk bootstrap aws://YOUR-ACCOUNT-ID/us-east-1
+cdk bootstrap aws://YOUR-ACCOUNT-ID/us-west-2
 
 # Example:
 # cdk bootstrap aws://123456789012/us-east-1
