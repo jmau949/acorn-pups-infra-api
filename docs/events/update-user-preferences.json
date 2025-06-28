@@ -1,0 +1,24 @@
+{
+  "resource": "/users/{userId}/preferences",
+  "path": "/users/user-001/preferences",
+  "httpMethod": "PUT",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "multiValueHeaders": {},
+  "queryStringParameters": null,
+  "multiValueQueryStringParameters": null,
+  "pathParameters": {
+    "userId": "user-001"
+  },
+  "stageVariables": null,
+  "requestContext": {
+    "resourcePath": "/users/{userId}/preferences",
+    "httpMethod": "PUT",
+    "path": "/users/user-001/preferences",
+    "requestTime": "28/Jun/2025:12:00:00 +0000",
+    "requestId": "sample-request-id"
+  },
+  "body": "{\"notifications\":{\"pushEnabled\":true,\"emailEnabled\":false},\"app\":{\"theme\":\"dark\",\"language\":\"en-US\"}}",
+  "isBase64Encoded": false
+} 

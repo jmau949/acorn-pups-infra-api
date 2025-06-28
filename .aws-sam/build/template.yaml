@@ -1,0 +1,200 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: 'Local-only SAM template to emulate the Acorn-Pups API Gateway & Lambdas.
+  It mirrors the routes, memory and timeout settings defined in CDK, but keeps everything
+  in one file for fast local development.
+
+  '
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    MemorySize: 256
+    Timeout: 30
+    Environment:
+      Variables:
+        ENVIRONMENT: dev
+        LOG_LEVEL: info
+  Api:
+    Cors:
+      AllowMethods: '''GET,POST,PUT,DELETE,OPTIONS'''
+      AllowHeaders: '''*'''
+      AllowOrigin: '''*'''
+Resources:
+  LocalApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: acorn-pups-local-api
+      StageName: dev
+      Cors:
+        Ref: AWS::NoValue
+  HealthCheckFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: HealthCheckFunction
+      Handler: lambda/health/index.handler
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: LocalApi
+            Path: /health
+            Method: get
+    Metadata:
+      SamResourceId: HealthCheckFunction
+  RegisterDeviceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: RegisterDeviceFunction
+      Handler: lambda/register-device/index.handler
+      Timeout: 60
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: LocalApi
+            Path: /devices/register
+            Method: post
+    Metadata:
+      SamResourceId: RegisterDeviceFunction
+  GetUserDevicesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: GetUserDevicesFunction
+      Handler: lambda/get-user-devices/index.handler
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: LocalApi
+            Path: /users/{userId}/devices
+            Method: get
+    Metadata:
+      SamResourceId: GetUserDevicesFunction
+  UpdateDeviceSettingsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: UpdateDeviceSettingsFunction
+      Handler: lambda/update-device-settings/index.handler
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: LocalApi
+            Path: /devices/{deviceId}/settings
+            Method: put
+    Metadata:
+      SamResourceId: UpdateDeviceSettingsFunction
+  DeleteDeviceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: DeleteDeviceFunction
+      Handler: lambda/delete-device/index.handler
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: LocalApi
+            Path: /devices/{deviceId}
+            Method: delete
+    Metadata:
+      SamResourceId: DeleteDeviceFunction
+  GetDeviceStatusFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: GetDeviceStatusFunction
+      Handler: lambda/get-device-status/index.handler
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: LocalApi
+            Path: /devices/{deviceId}/status
+            Method: get
+    Metadata:
+      SamResourceId: GetDeviceStatusFunction
+  GetDeviceHistoryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: GetDeviceHistoryFunction
+      Handler: lambda/get-device-history/index.handler
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: LocalApi
+            Path: /devices/{deviceId}/history
+            Method: get
+    Metadata:
+      SamResourceId: GetDeviceHistoryFunction
+  InviteUserFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: InviteUserFunction
+      Handler: lambda/invite-user/index.handler
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: LocalApi
+            Path: /devices/{deviceId}/invite
+            Method: post
+    Metadata:
+      SamResourceId: InviteUserFunction
+  RemoveUserFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: RemoveUserFunction
+      Handler: lambda/remove-user/index.handler
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: LocalApi
+            Path: /devices/{deviceId}/users/{userId}
+            Method: delete
+    Metadata:
+      SamResourceId: RemoveUserFunction
+  GetDeviceUsersFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: GetDeviceUsersFunction
+      Handler: lambda/get-device-users/index.handler
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: LocalApi
+            Path: /devices/{deviceId}/users
+            Method: get
+    Metadata:
+      SamResourceId: GetDeviceUsersFunction
+  UpdateUserPreferencesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: UpdateUserPreferencesFunction
+      Handler: lambda/update-user-preferences/index.handler
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: LocalApi
+            Path: /users/{userId}/preferences
+            Method: put
+    Metadata:
+      SamResourceId: UpdateUserPreferencesFunction
+Outputs:
+  ApiUrl:
+    Description: URL of the locally emulated API Gateway
+    Value:
+      Fn::Sub: http://localhost:3000/${LocalApi.StageName}

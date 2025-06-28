@@ -1,0 +1,22 @@
+{
+  "resource": "/health",
+  "path": "/health",
+  "httpMethod": "GET",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "multiValueHeaders": {},
+  "queryStringParameters": null,
+  "multiValueQueryStringParameters": null,
+  "pathParameters": null,
+  "stageVariables": null,
+  "requestContext": {
+    "resourcePath": "/health",
+    "httpMethod": "GET",
+    "path": "/health",
+    "requestTime": "28/Jun/2025:12:00:00 +0000",
+    "requestId": "sample-request-id"
+  },
+  "body": null,
+  "isBase64Encoded": false
+} 

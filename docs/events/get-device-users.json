@@ -1,0 +1,24 @@
+{
+  "resource": "/devices/{deviceId}/users",
+  "path": "/devices/device-123/users",
+  "httpMethod": "GET",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "multiValueHeaders": {},
+  "queryStringParameters": null,
+  "multiValueQueryStringParameters": null,
+  "pathParameters": {
+    "deviceId": "device-123"
+  },
+  "stageVariables": null,
+  "requestContext": {
+    "resourcePath": "/devices/{deviceId}/users",
+    "httpMethod": "GET",
+    "path": "/devices/device-123/users",
+    "requestTime": "28/Jun/2025:12:00:00 +0000",
+    "requestId": "sample-request-id"
+  },
+  "body": null,
+  "isBase64Encoded": false
+} 

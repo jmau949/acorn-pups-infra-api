@@ -1,0 +1,24 @@
+{
+  "resource": "/devices/{deviceId}/invite",
+  "path": "/devices/device-123/invite",
+  "httpMethod": "POST",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "multiValueHeaders": {},
+  "queryStringParameters": null,
+  "multiValueQueryStringParameters": null,
+  "pathParameters": {
+    "deviceId": "device-123"
+  },
+  "stageVariables": null,
+  "requestContext": {
+    "resourcePath": "/devices/{deviceId}/invite",
+    "httpMethod": "POST",
+    "path": "/devices/device-123/invite",
+    "requestTime": "28/Jun/2025:12:00:00 +0000",
+    "requestId": "sample-request-id"
+  },
+  "body": "{\"email\":\"friend@example.com\",\"role\":\"viewer\"}",
+  "isBase64Encoded": false
+} 

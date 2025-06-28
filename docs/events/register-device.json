@@ -1,0 +1,22 @@
+{
+  "resource": "/devices/register",
+  "path": "/devices/register",
+  "httpMethod": "POST",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "multiValueHeaders": {},
+  "queryStringParameters": null,
+  "multiValueQueryStringParameters": null,
+  "pathParameters": null,
+  "stageVariables": null,
+  "requestContext": {
+    "resourcePath": "/devices/register",
+    "httpMethod": "POST",
+    "path": "/devices/register",
+    "requestTime": "28/Jun/2025:12:00:00 +0000",
+    "requestId": "sample-request-id"
+  },
+  "body": "{\"deviceId\":\"device-123\",\"deviceName\":\"Buddy Button\",\"deviceType\":\"acorn-button-v1\",\"userId\":\"user-001\"}",
+  "isBase64Encoded": false
+} 

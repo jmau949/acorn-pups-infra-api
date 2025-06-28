@@ -1,0 +1,28 @@
+{
+  "resource": "/devices/{deviceId}/history",
+  "path": "/devices/device-123/history",
+  "httpMethod": "GET",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "multiValueHeaders": {},
+  "queryStringParameters": {
+    "limit": "50"
+  },
+  "multiValueQueryStringParameters": {
+    "limit": ["50"]
+  },
+  "pathParameters": {
+    "deviceId": "device-123"
+  },
+  "stageVariables": null,
+  "requestContext": {
+    "resourcePath": "/devices/{deviceId}/history",
+    "httpMethod": "GET",
+    "path": "/devices/device-123/history",
+    "requestTime": "28/Jun/2025:12:00:00 +0000",
+    "requestId": "sample-request-id"
+  },
+  "body": null,
+  "isBase64Encoded": false
+} 

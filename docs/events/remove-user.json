@@ -1,0 +1,25 @@
+{
+  "resource": "/devices/{deviceId}/users/{userId}",
+  "path": "/devices/device-123/users/user-002",
+  "httpMethod": "DELETE",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "multiValueHeaders": {},
+  "queryStringParameters": null,
+  "multiValueQueryStringParameters": null,
+  "pathParameters": {
+    "deviceId": "device-123",
+    "userId": "user-002"
+  },
+  "stageVariables": null,
+  "requestContext": {
+    "resourcePath": "/devices/{deviceId}/users/{userId}",
+    "httpMethod": "DELETE",
+    "path": "/devices/device-123/users/user-002",
+    "requestTime": "28/Jun/2025:12:00:00 +0000",
+    "requestId": "sample-request-id"
+  },
+  "body": null,
+  "isBase64Encoded": false
+} 
