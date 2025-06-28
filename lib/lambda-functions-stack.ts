@@ -69,18 +69,17 @@ export class LambdaFunctionsStack extends cdk.Stack {
           image: lambda.Runtime.NODEJS_22_X.bundlingImage,
           command: [
             'bash', '-c', [
-              // Add error handling
               'set -e',
-              // Create the output directory structure
-              'mkdir -p /asset-output',
-              // Check if source directories exist
-              `if [ ! -d "dist/lambda/${functionPath}" ]; then echo "Error: Function directory dist/lambda/${functionPath} not found"; exit 1; fi`,
-              `if [ ! -d "dist/lambda/shared" ]; then echo "Error: Shared directory dist/lambda/shared not found"; exit 1; fi`,
-              // Copy the specific function's code
-              `cp -r dist/lambda/${functionPath}/* /asset-output/`,
-              // Create shared directory and copy shared code
-              'mkdir -p /asset-output/shared',
-              'cp -r dist/lambda/shared/* /asset-output/shared/',
+              // Create only the shared directory structure
+              'mkdir -p /asset-output/lambda/shared',
+              // Copy only the shared files (no function duplicates)
+              'cp -r dist/lambda/shared/* /asset-output/lambda/shared/',
+              // Copy the function's handler to the root with corrected import
+              `cp dist/lambda/${functionPath}/index.js /tmp/original-index.js`,
+              // Use sed to fix the import path in the copied file
+              `sed 's|../shared/|./lambda/shared/|g' /tmp/original-index.js > /asset-output/index.js`,
+              // Copy other files from the function directory
+              `cp dist/lambda/${functionPath}/index.d.ts /asset-output/ 2>/dev/null || true`,
             ].join(' && ')
           ],
         },
