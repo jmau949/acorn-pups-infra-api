@@ -21,42 +21,27 @@ npm install
 
 ---
 
-## 3. Build & watch TypeScript (hot reload)
+## 3. One-command hot-reload dev server
+
+Everything now runs via a single script that watches TypeScript, rebuilds the SAM artefacts and restarts containers when code changes.
 
 ```powershell
-# Continuous compilation – every save re-emits JS to ./dist
-npm run watch
+npm run dev
 ```
 
-The compiler writes JavaScript into `dist/`.  **SAM watches the compiled files**, so you do **not** need to rebuild the Docker containers manually.
+Behind the scenes `npm run dev` does three things in parallel (see `package.json`):
+
+1. `npm run watch` – incremental TypeScript compile to `dist/`.
+2. Watches `dist/**/*.js` with `chokidar` and triggers `sam build --parallel` after every change (fast, incremental build).
+3. Runs `sam local start-api --host 0.0.0.0 --port 3000`.
+
+Because containers are **not** kept warm, each HTTP request spins up a fresh container that always reflects the latest code.
+
+You'll see three colour-coded panes in your terminal: **TS**, **BUILD**, and **SAM**.
 
 ---
 
-## 4. Start the local API Gateway
-
-Open a **new** terminal (leave the watcher running) and execute:
-
-```powershell
-# Build template + start api with hot containers
-sam build --cached
-sam local start-api --host 0.0.0.0 --port 3000 --warm-containers EAGER
-```
-
-**What this does**
-* `sam build` picks up `dist/` and produces `.aws-sam/build/template.yaml` with **all Lambda memory & timeout values copied from CDK**.
-* `sam local start-api` emulates API Gateway on <http://localhost:3000>.
-* The `--warm-containers EAGER` flag gives you *hot-reload*: when code in `dist/` changes the corresponding container is replaced automatically.
-
-You will see logs similar to:
-
-```
-Mounting RegisterDeviceFunction at http://0.0.0.0:3000/devices/register         [POST, OPTIONS]
-...etc
-```
-
----
-
-## 5. Confirm it is working
+## 4. Confirm it is working
 
 ```powershell
 curl http://localhost:3000/health
@@ -75,7 +60,7 @@ Expected response (200):
 
 ---
 
-## 6. CORS
+## 5. CORS
 
 Every Lambda uses `ResponseHandler` which automatically adds
 
@@ -88,14 +73,14 @@ That is enough for local testing.  If you need to tweak CORS further, edit the h
 
 ---
 
-## 7. Updating memory / timeout values
+## 6. Updating memory / timeout values
 
 Memory and timeout are defined in **CDK** (`lib/lambda-functions-stack.ts`).
-When you change them just re-run `sam build` – the generated template picks up the new values.
+When you change them just let `npm run dev` rebuild – the generated template picks up the new values automatically.
 
 ---
 
-## 8. Cleaning up
+## 7. Cleaning up
 
 ```powershell
 # Stop the API (Ctrl+C) then remove containers & artefacts if you like
@@ -111,6 +96,6 @@ Remove-Item .aws-sam -Recurse -Force
 |---------|------|
 | `sam` command not found | Verify SAM CLI is installed & in PATH |
 | Docker permission denied | Make sure Docker Desktop is running |
-| Function code not updating | Check the TypeScript watcher is running and `dist/` is receiving new `.js` files |
+| Function code not updating | Make sure `npm run dev` is still running and the **BUILD** pane is rebuilding without errors |
 
 Happy coding! :rocket: 

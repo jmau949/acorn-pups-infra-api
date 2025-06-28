@@ -147,6 +147,9 @@ cdk.context.json
 .aws/
 aws-exports.js
 
+# AWS SAM local build artifacts
+.aws-sam/
+
 # Lambda build artifacts
 lambda/**/node_modules/
 lambda/**/*.js
