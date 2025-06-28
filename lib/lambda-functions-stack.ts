@@ -18,7 +18,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
 
     // Shared Lambda layer for common dependencies
     const sharedLayer = new lambda.LayerVersion(this, 'SharedLayer', {
-      code: lambda.Code.fromAsset('lambda/shared'),
+      code: lambda.Code.fromAsset('dist/lambda/shared'),
       compatibleRuntimes: [lambda.Runtime.NODEJS_22_X],
       description: 'Shared utilities and response handlers',
     });
@@ -58,7 +58,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       healthCheck: new lambda.Function(this, 'HealthCheckFunction', {
         ...commonFunctionProps,
         functionName: `acorn-pups-${props.environment}-health-check`,
-        code: lambda.Code.fromAsset('lambda/health'),
+        code: lambda.Code.fromAsset('dist/lambda/health'),
         handler: 'index.handler',
         description: 'Health check endpoint for API monitoring',
       }),
@@ -67,7 +67,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       registerDevice: new lambda.Function(this, 'RegisterDeviceFunction', {
         ...commonFunctionProps,
         functionName: `acorn-pups-${props.environment}-register-device`,
-        code: lambda.Code.fromAsset('lambda/register-device'),
+        code: lambda.Code.fromAsset('dist/lambda/register-device'),
         handler: 'index.handler',
         description: 'Register a new device for a user',
         timeout: cdk.Duration.seconds(60),
@@ -76,7 +76,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       getUserDevices: new lambda.Function(this, 'GetUserDevicesFunction', {
         ...commonFunctionProps,
         functionName: `acorn-pups-${props.environment}-get-user-devices`,
-        code: lambda.Code.fromAsset('lambda/get-user-devices'),
+        code: lambda.Code.fromAsset('dist/lambda/get-user-devices'),
         handler: 'index.handler',
         description: 'Get all devices for a specific user',
       }),
@@ -84,7 +84,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       updateDeviceSettings: new lambda.Function(this, 'UpdateDeviceSettingsFunction', {
         ...commonFunctionProps,
         functionName: `acorn-pups-${props.environment}-update-device-settings`,
-        code: lambda.Code.fromAsset('lambda/update-device-settings'),
+        code: lambda.Code.fromAsset('dist/lambda/update-device-settings'),
         handler: 'index.handler',
         description: 'Update device configuration and settings',
       }),
@@ -92,7 +92,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       deleteDevice: new lambda.Function(this, 'DeleteDeviceFunction', {
         ...commonFunctionProps,
         functionName: `acorn-pups-${props.environment}-delete-device`,
-        code: lambda.Code.fromAsset('lambda/delete-device'),
+        code: lambda.Code.fromAsset('dist/lambda/delete-device'),
         handler: 'index.handler',
         description: 'Remove a device and all associated data',
       }),
@@ -100,7 +100,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       getDeviceStatus: new lambda.Function(this, 'GetDeviceStatusFunction', {
         ...commonFunctionProps,
         functionName: `acorn-pups-${props.environment}-get-device-status`,
-        code: lambda.Code.fromAsset('lambda/get-device-status'),
+        code: lambda.Code.fromAsset('dist/lambda/get-device-status'),
         handler: 'index.handler',
         description: 'Get current status and connectivity of a device',
       }),
@@ -108,7 +108,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       getDeviceHistory: new lambda.Function(this, 'GetDeviceHistoryFunction', {
         ...commonFunctionProps,
         functionName: `acorn-pups-${props.environment}-get-device-history`,
-        code: lambda.Code.fromAsset('lambda/get-device-history'),
+        code: lambda.Code.fromAsset('dist/lambda/get-device-history'),
         handler: 'index.handler',
         description: 'Get button press history for a device',
       }),
@@ -117,7 +117,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       inviteUser: new lambda.Function(this, 'InviteUserFunction', {
         ...commonFunctionProps,
         functionName: `acorn-pups-${props.environment}-invite-user`,
-        code: lambda.Code.fromAsset('lambda/invite-user'),
+        code: lambda.Code.fromAsset('dist/lambda/invite-user'),
         handler: 'index.handler',
         description: 'Invite a user to access a device',
       }),
@@ -125,7 +125,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       removeUser: new lambda.Function(this, 'RemoveUserFunction', {
         ...commonFunctionProps,
         functionName: `acorn-pups-${props.environment}-remove-user`,
-        code: lambda.Code.fromAsset('lambda/remove-user'),
+        code: lambda.Code.fromAsset('dist/lambda/remove-user'),
         handler: 'index.handler',
         description: 'Remove user access from a device',
       }),
@@ -133,7 +133,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       getDeviceUsers: new lambda.Function(this, 'GetDeviceUsersFunction', {
         ...commonFunctionProps,
         functionName: `acorn-pups-${props.environment}-get-device-users`,
-        code: lambda.Code.fromAsset('lambda/get-device-users'),
+        code: lambda.Code.fromAsset('dist/lambda/get-device-users'),
         handler: 'index.handler',
         description: 'Get all users with access to a device',
       }),
@@ -141,7 +141,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       updateUserPreferences: new lambda.Function(this, 'UpdateUserPreferencesFunction', {
         ...commonFunctionProps,
         functionName: `acorn-pups-${props.environment}-update-user-preferences`,
-        code: lambda.Code.fromAsset('lambda/update-user-preferences'),
+        code: lambda.Code.fromAsset('dist/lambda/update-user-preferences'),
         handler: 'index.handler',
         description: 'Update user notification and app preferences',
       }),
