@@ -16,13 +16,6 @@ export class LambdaFunctionsStack extends cdk.Stack {
     cdk.Tags.of(this).add('Environment', props.environment);
     cdk.Tags.of(this).add('Component', 'Lambda Functions');
 
-    // Shared Lambda layer for common dependencies
-    const sharedLayer = new lambda.LayerVersion(this, 'SharedLayer', {
-      code: lambda.Code.fromAsset('dist/lambda/shared'),
-      compatibleRuntimes: [lambda.Runtime.NODEJS_22_X],
-      description: 'Shared utilities and response handlers',
-    });
-
     // Common environment variables for all functions
     const commonEnvironment = {
       ENVIRONMENT: props.environment,
@@ -30,27 +23,33 @@ export class LambdaFunctionsStack extends cdk.Stack {
       LOG_LEVEL: props.logLevel,
     };
 
-    // Common Lambda function configuration with esbuild bundling for code isolation
+    // Function to create bundled code with shared dependencies
+    const createBundledCode = (functionPath: string) => {
+      return lambda.Code.fromAsset('.', {
+        bundling: {
+          image: lambda.Runtime.NODEJS_22_X.bundlingImage,
+          command: [
+            'bash', '-c', [
+              // Create the output directory structure
+              'mkdir -p /asset-output',
+              // Copy the specific function's code
+              `cp -r dist/lambda/${functionPath}/* /asset-output/`,
+              // Create shared directory and copy shared code
+              'mkdir -p /asset-output/shared',
+              'cp -r dist/lambda/shared/* /asset-output/shared/',
+            ].join(' && ')
+          ],
+        },
+      });
+    };
+
+    // Common Lambda function configuration
     const commonFunctionProps = {
       runtime: lambda.Runtime.NODEJS_22_X,
       timeout: cdk.Duration.seconds(30),
       memorySize: 256,
-      layers: [sharedLayer],
       environment: commonEnvironment,
       logRetention: logs.RetentionDays.ONE_WEEK,
-      bundling: {
-        minify: true,
-        sourceMap: false,
-        target: 'node22',
-        externalModules: [
-          '@aws-sdk/*', // AWS SDK v3 is included in Lambda runtime
-        ],
-        mainFields: ['module', 'main'],
-        keepNames: true,
-        loader: {
-          '.ts': 'ts',
-        },
-      },
     };
 
     // Health Check Function (no auth required)
@@ -58,7 +57,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       healthCheck: new lambda.Function(this, 'HealthCheckFunction', {
         ...commonFunctionProps,
         functionName: `acorn-pups-${props.environment}-health-check`,
-        code: lambda.Code.fromAsset('dist/lambda/health'),
+        code: createBundledCode('health'),
         handler: 'index.handler',
         description: 'Health check endpoint for API monitoring',
       }),
@@ -67,7 +66,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       registerDevice: new lambda.Function(this, 'RegisterDeviceFunction', {
         ...commonFunctionProps,
         functionName: `acorn-pups-${props.environment}-register-device`,
-        code: lambda.Code.fromAsset('dist/lambda/register-device'),
+        code: createBundledCode('register-device'),
         handler: 'index.handler',
         description: 'Register a new device for a user',
         timeout: cdk.Duration.seconds(60),
@@ -76,7 +75,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       getUserDevices: new lambda.Function(this, 'GetUserDevicesFunction', {
         ...commonFunctionProps,
         functionName: `acorn-pups-${props.environment}-get-user-devices`,
-        code: lambda.Code.fromAsset('dist/lambda/get-user-devices'),
+        code: createBundledCode('get-user-devices'),
         handler: 'index.handler',
         description: 'Get all devices for a specific user',
       }),
@@ -84,7 +83,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       updateDeviceSettings: new lambda.Function(this, 'UpdateDeviceSettingsFunction', {
         ...commonFunctionProps,
         functionName: `acorn-pups-${props.environment}-update-device-settings`,
-        code: lambda.Code.fromAsset('dist/lambda/update-device-settings'),
+        code: createBundledCode('update-device-settings'),
         handler: 'index.handler',
         description: 'Update device configuration and settings',
       }),
@@ -92,7 +91,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       deleteDevice: new lambda.Function(this, 'DeleteDeviceFunction', {
         ...commonFunctionProps,
         functionName: `acorn-pups-${props.environment}-delete-device`,
-        code: lambda.Code.fromAsset('dist/lambda/delete-device'),
+        code: createBundledCode('delete-device'),
         handler: 'index.handler',
         description: 'Remove a device and all associated data',
       }),
@@ -100,7 +99,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       getDeviceStatus: new lambda.Function(this, 'GetDeviceStatusFunction', {
         ...commonFunctionProps,
         functionName: `acorn-pups-${props.environment}-get-device-status`,
-        code: lambda.Code.fromAsset('dist/lambda/get-device-status'),
+        code: createBundledCode('get-device-status'),
         handler: 'index.handler',
         description: 'Get current status and connectivity of a device',
       }),
@@ -108,7 +107,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       getDeviceHistory: new lambda.Function(this, 'GetDeviceHistoryFunction', {
         ...commonFunctionProps,
         functionName: `acorn-pups-${props.environment}-get-device-history`,
-        code: lambda.Code.fromAsset('dist/lambda/get-device-history'),
+        code: createBundledCode('get-device-history'),
         handler: 'index.handler',
         description: 'Get button press history for a device',
       }),
@@ -117,7 +116,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       inviteUser: new lambda.Function(this, 'InviteUserFunction', {
         ...commonFunctionProps,
         functionName: `acorn-pups-${props.environment}-invite-user`,
-        code: lambda.Code.fromAsset('dist/lambda/invite-user'),
+        code: createBundledCode('invite-user'),
         handler: 'index.handler',
         description: 'Invite a user to access a device',
       }),
@@ -125,7 +124,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       removeUser: new lambda.Function(this, 'RemoveUserFunction', {
         ...commonFunctionProps,
         functionName: `acorn-pups-${props.environment}-remove-user`,
-        code: lambda.Code.fromAsset('dist/lambda/remove-user'),
+        code: createBundledCode('remove-user'),
         handler: 'index.handler',
         description: 'Remove user access from a device',
       }),
@@ -133,7 +132,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       getDeviceUsers: new lambda.Function(this, 'GetDeviceUsersFunction', {
         ...commonFunctionProps,
         functionName: `acorn-pups-${props.environment}-get-device-users`,
-        code: lambda.Code.fromAsset('dist/lambda/get-device-users'),
+        code: createBundledCode('get-device-users'),
         handler: 'index.handler',
         description: 'Get all users with access to a device',
       }),
@@ -141,7 +140,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       updateUserPreferences: new lambda.Function(this, 'UpdateUserPreferencesFunction', {
         ...commonFunctionProps,
         functionName: `acorn-pups-${props.environment}-update-user-preferences`,
-        code: lambda.Code.fromAsset('dist/lambda/update-user-preferences'),
+        code: createBundledCode('update-user-preferences'),
         handler: 'index.handler',
         description: 'Update user notification and app preferences',
       }),
@@ -206,4 +205,4 @@ export class LambdaFunctionsStack extends cdk.Stack {
       });
     });
   }
-} 
+}
