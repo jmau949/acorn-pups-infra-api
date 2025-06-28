@@ -23,6 +23,45 @@ export class LambdaFunctionsStack extends cdk.Stack {
       LOG_LEVEL: props.logLevel,
     };
 
+    // Create common IAM role for Lambda functions (moved up)
+    const lambdaRole = new iam.Role(this, 'LambdaExecutionRole', {
+      roleName: `acorn-pups-${props.environment}-lambda-role`,
+      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
+      ],
+      inlinePolicies: {
+        ParameterStoreAccess: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                'ssm:GetParameter',
+                'ssm:GetParameters',
+                'ssm:GetParametersByPath',
+              ],
+              resources: [
+                `arn:aws:ssm:${this.region}:${this.account}:parameter/acorn-pups/${props.environment}/*`,
+              ],
+            }),
+          ],
+        }),
+        CloudWatchLogs: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                'logs:CreateLogGroup',
+                'logs:CreateLogStream',
+                'logs:PutLogEvents',
+              ],
+              resources: ['*'],
+            }),
+          ],
+        }),
+      },
+    });
+
     // Function to create bundled code with shared dependencies
     const createBundledCode = (functionPath: string) => {
       return lambda.Code.fromAsset('.', {
@@ -30,8 +69,13 @@ export class LambdaFunctionsStack extends cdk.Stack {
           image: lambda.Runtime.NODEJS_22_X.bundlingImage,
           command: [
             'bash', '-c', [
+              // Add error handling
+              'set -e',
               // Create the output directory structure
               'mkdir -p /asset-output',
+              // Check if source directories exist
+              `if [ ! -d "dist/lambda/${functionPath}" ]; then echo "Error: Function directory dist/lambda/${functionPath} not found"; exit 1; fi`,
+              `if [ ! -d "dist/lambda/shared" ]; then echo "Error: Shared directory dist/lambda/shared not found"; exit 1; fi`,
               // Copy the specific function's code
               `cp -r dist/lambda/${functionPath}/* /asset-output/`,
               // Create shared directory and copy shared code
@@ -50,6 +94,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       memorySize: 256,
       environment: commonEnvironment,
       logRetention: logs.RetentionDays.ONE_WEEK,
+      role: lambdaRole, // Now properly assigned
     };
 
     // Health Check Function (no auth required)
@@ -145,50 +190,6 @@ export class LambdaFunctionsStack extends cdk.Stack {
         description: 'Update user notification and app preferences',
       }),
     };
-
-    // Create common IAM role for Lambda functions
-    const lambdaRole = new iam.Role(this, 'LambdaExecutionRole', {
-      roleName: `acorn-pups-${props.environment}-lambda-role`,
-      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
-      managedPolicies: [
-        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
-      ],
-      inlinePolicies: {
-        ParameterStoreAccess: new iam.PolicyDocument({
-          statements: [
-            new iam.PolicyStatement({
-              effect: iam.Effect.ALLOW,
-              actions: [
-                'ssm:GetParameter',
-                'ssm:GetParameters',
-                'ssm:GetParametersByPath',
-              ],
-              resources: [
-                `arn:aws:ssm:${this.region}:${this.account}:parameter/acorn-pups/${props.environment}/*`,
-              ],
-            }),
-          ],
-        }),
-        CloudWatchLogs: new iam.PolicyDocument({
-          statements: [
-            new iam.PolicyStatement({
-              effect: iam.Effect.ALLOW,
-              actions: [
-                'logs:CreateLogGroup',
-                'logs:CreateLogStream',
-                'logs:PutLogEvents',
-              ],
-              resources: ['*'],
-            }),
-          ],
-        }),
-      },
-    });
-
-    // Apply the role to all functions
-    Object.values(this.functions).forEach(func => {
-      func.node.addDependency(lambdaRole);
-    });
 
     // Add tags to all Lambda functions
     Object.entries(this.functions).forEach(([name, func]) => {
