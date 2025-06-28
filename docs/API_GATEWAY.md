@@ -526,12 +526,12 @@ npx @openapitools/openapi-generator-cli generate \
 ```powershell
 # Get API Gateway URL after deployment
 aws cloudformation describe-stacks \
-  --stack-name AcornPups-dev-ApiGateway \
+  --stack-name acorn-pups-dev-apigateway \
   --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' \
   --output text
 
 # Test health endpoint
-curl $(aws cloudformation describe-stacks --stack-name AcornPups-dev-ApiGateway --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' --output text)/health
+curl $(aws cloudformation describe-stacks --stack-name acorn-pups-dev-apigateway --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' --output text)/health
 
 # Monitor API Gateway logs
 aws logs tail /aws/apigateway/acorn-pups-dev --follow

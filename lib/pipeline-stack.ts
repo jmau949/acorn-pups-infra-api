@@ -16,7 +16,7 @@ export class PipelineStack extends cdk.Stack {
     // Add project tags to all resources in this stack
     cdk.Tags.of(this).add('Project', 'acorn-pups');
     cdk.Tags.of(this).add('Environment', props.branch === 'master' ? 'prod' : 'dev');
-    cdk.Tags.of(this).add('Component', 'CI/CD Pipeline');
+    cdk.Tags.of(this).add('Component', 'pipeline');
 
     // S3 Bucket for pipeline artifacts
     const artifactsBucket = new s3.Bucket(this, 'PipelineArtifacts', {

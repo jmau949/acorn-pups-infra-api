@@ -96,9 +96,9 @@ npm test
 npm run deploy:dev
 
 # Deploy specific stack
-cdk deploy AcornPups-dev-Lambda --context environment=dev
-cdk deploy AcornPups-dev-ApiGateway --context environment=dev
-cdk deploy AcornPups-dev-Monitoring --context environment=dev
+cdk deploy acorn-pups-dev-lambda --context environment=dev
+cdk deploy acorn-pups-dev-apigateway --context environment=dev
+cdk deploy acorn-pups-dev-monitoring --context environment=dev
 ```
 
 ### **Production Environment**
@@ -114,8 +114,8 @@ cdk deploy --all --context environment=prod --require-approval broadening
 After successful deployment, you'll see outputs like:
 ```
 Outputs:
-AcornPups-dev-ApiGateway.ApiUrl = https://abc123def.execute-api.us-east-1.amazonaws.com/dev/
-AcornPups-dev-Monitoring.DashboardUrl = https://console.aws.amazon.com/cloudwatch/...
+acorn-pups-dev-apigateway.ApiUrl = https://abc123def.execute-api.us-east-1.amazonaws.com/dev/
+acorn-pups-dev-monitoring.DashboardUrl = https://console.aws.amazon.com/cloudwatch/...
 ```
 
 ### **Destroy/Cleanup**
@@ -175,10 +175,10 @@ aws secretsmanager create-secret \
 #### **Deploy Pipeline Stack:**
 ```powershell
 # Deploy pipeline for develop branch (dev environment)
-cdk deploy AcornPups-Pipeline-dev --context branch=develop
+cdk deploy acorn-pups-pipeline-dev --context branch=develop
 
 # Deploy pipeline for master branch (prod environment)  
-cdk deploy AcornPups-Pipeline-prod --context branch=master
+cdk deploy acorn-pups-pipeline-prod --context branch=master
 ```
 
 ### **4. Branch-Based Deployment Strategy**
@@ -312,7 +312,7 @@ npm run diff:prod
 cdk deploy --verbose
 
 # Check CloudFormation stack status
-aws cloudformation describe-stacks --stack-name AcornPups-dev-Lambda
+aws cloudformation describe-stacks --stack-name acorn-pups-dev-lambda
 
 # View CodeBuild logs
 aws logs get-log-events --log-group-name /aws/codebuild/acorn-pups-api-build

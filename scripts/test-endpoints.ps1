@@ -16,7 +16,7 @@ Write-Host "Environment: $Environment" -ForegroundColor Cyan
 
 # Get API Gateway URL from CloudFormation
 try {
-    $stackName = "AcornPups-$Environment-ApiGateway"
+    $stackName = "acorn-pups-$Environment-apigateway"
     $apiUrl = aws cloudformation describe-stacks --stack-name $stackName --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text
     
     if (-not $apiUrl) {

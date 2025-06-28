@@ -14,7 +14,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
     // Add project tags to all resources in this stack
     cdk.Tags.of(this).add('Project', 'acorn-pups');
     cdk.Tags.of(this).add('Environment', props.environment);
-    cdk.Tags.of(this).add('Component', 'Lambda Functions');
+    cdk.Tags.of(this).add('Component', 'lambda-functions');
 
     // Common environment variables for all functions
     const commonEnvironment = {

@@ -15,17 +15,17 @@ export class ApiGatewayStack extends cdk.Stack {
     // Add project tags to all resources in this stack
     cdk.Tags.of(this).add('Project', 'acorn-pups');
     cdk.Tags.of(this).add('Environment', props.environment);
-    cdk.Tags.of(this).add('Component', 'API Gateway');
+    cdk.Tags.of(this).add('Component', 'api-gateway');
 
     // CloudWatch Log Group for API Gateway
-    const logGroup = new logs.LogGroup(this, 'ApiGatewayLogs', {
+    const logGroup = new logs.LogGroup(this, 'apigatewayLogs', {
       logGroupName: `/aws/apigateway/acorn-pups-${props.environment}`,
       retention: logs.RetentionDays.ONE_WEEK,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
     // Create REST API
-    this.api = new apigateway.RestApi(this, 'AcornPupsApi', {
+    this.api = new apigateway.RestApi(this, 'acorn-pups-api', {
       restApiName: `acorn-pups-${props.environment}-api`,
       description: `Acorn Pups API Gateway for ${props.environment} environment`,
       

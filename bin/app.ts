@@ -44,17 +44,17 @@ if (!envConfig) {
 }
 
 // Stack naming convention
-const stackPrefix = `AcornPups-${environment}`;
+const stackPrefix = `acorn-pups-${environment}`;
 
 // Lambda Functions Stack (contains all Lambda functions)
-const lambdaStack = new LambdaFunctionsStack(app, `${stackPrefix}-Lambda`, {
+const lambdaStack = new LambdaFunctionsStack(app, `${stackPrefix}-lambda`, {
   env,
   environment,
   ...envConfig,
 });
 
 // API Gateway Stack (main API with routing)
-const apiStack = new ApiGatewayStack(app, `${stackPrefix}-ApiGateway`, {
+const apiStack = new ApiGatewayStack(app, `${stackPrefix}-apigateway`, {
   env,
   environment,
   lambdaFunctions: lambdaStack.functions,
@@ -62,7 +62,7 @@ const apiStack = new ApiGatewayStack(app, `${stackPrefix}-ApiGateway`, {
 });
 
 // Monitoring Stack (CloudWatch, alarms, dashboards)
-const monitoringStack = new MonitoringStack(app, `${stackPrefix}-Monitoring`, {
+const monitoringStack = new MonitoringStack(app, `${stackPrefix}-monitoring`, {
   env,
   environment,
   apiGateway: apiStack.api,
@@ -72,7 +72,7 @@ const monitoringStack = new MonitoringStack(app, `${stackPrefix}-Monitoring`, {
 
 // Pipeline Stack (only for prod, handles CI/CD)
 if (environment === 'prod') {
-  new PipelineStack(app, `AcornPups-Pipeline`, {
+  new PipelineStack(app, `acorn-pups-pipeline`, {
     env,
     repositoryName: 'acorn-pups-infrastructure-api',
     branch: 'master',
@@ -85,7 +85,7 @@ monitoringStack.addDependency(apiStack);
 monitoringStack.addDependency(lambdaStack);
 
 // Tags for all resources
-cdk.Tags.of(app).add('Project', 'AcornPups');
+cdk.Tags.of(app).add('Project', 'acorn-pups');
 cdk.Tags.of(app).add('Environment', environment);
 cdk.Tags.of(app).add('Service', 'API-Gateway');
 cdk.Tags.of(app).add('ManagedBy', 'CDK'); 

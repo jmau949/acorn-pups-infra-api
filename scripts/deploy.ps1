@@ -142,10 +142,10 @@ Write-Host ""
 # Get and display stack outputs
 Write-Host "📋 Stack Outputs:" -ForegroundColor Yellow
 try {
-    $stackPrefix = "AcornPups-$Environment"
+    $stackPrefix = "acorn-pups-$Environment"
     
     # API Gateway URL
-    $apiUrl = aws cloudformation describe-stacks --stack-name "$stackPrefix-ApiGateway" --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text
+    $apiUrl = aws cloudformation describe-stacks --stack-name "$stackPrefix-apigateway" --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text
     if ($apiUrl) {
         Write-Host "API Gateway URL: $apiUrl" -ForegroundColor Cyan
     }

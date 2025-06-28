@@ -26,7 +26,7 @@ The Acorn Pups API includes comprehensive monitoring across all infrastructure c
 
 ### **Monitoring Stack Resources:**
 ```
-AcornPups-{env}-Monitoring:
+acorn-pups-{env}-monitoring:
 ├── CloudWatch Dashboard
 ├── SNS Alarm Topic
 ├── API Gateway Metrics & Alarms
@@ -270,7 +270,7 @@ aws logs filter-log-events \
 const cloudwatch = new CloudWatchClient({});
 
 await cloudwatch.send(new PutMetricDataCommand({
-  Namespace: 'AcornPups/API',
+  Namespace: 'acorn-pups/API',
   MetricData: [{
     MetricName: 'DeviceRegistrationSuccess',
     Value: 1,
@@ -516,7 +516,7 @@ aws cloudwatch describe-alarms --state-value ALARM
 
 # Get latest metrics
 aws cloudwatch get-metric-statistics \
-    --namespace AWS/ApiGateway \
+    --namespace AWS/apigateway \
     --metric-name Count \
     --dimensions Name=ApiName,Value=acorn-pups-prod-api \
     --start-time $(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%S) \

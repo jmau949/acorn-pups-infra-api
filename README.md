@@ -192,14 +192,14 @@ The CDK stacks use environment-specific configuration:
 ```typescript
 const config = {
   dev: {
-    apiGatewayStageName: 'dev',
+    apigatewayStageName: 'dev',
     domainPrefix: 'api-dev',
     logLevel: 'DEBUG',
     throttleRateLimit: 100,
     throttleBurstLimit: 200,
   },
   prod: {
-    apiGatewayStageName: 'prod', 
+    apigatewayStageName: 'prod', 
     domainPrefix: 'api',
     logLevel: 'INFO',
     throttleRateLimit: 1000,
@@ -320,7 +320,7 @@ The repository includes a CodePipeline that:
 
 3. **Deploy pipeline**:
    ```bash
-   cdk deploy AcornPups-Pipeline
+   cdk deploy acorn-pups-pipeline
    ```
 
 ## 🔒 Security

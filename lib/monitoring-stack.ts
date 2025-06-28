@@ -17,7 +17,7 @@ export class MonitoringStack extends cdk.Stack {
     // Add project tags to all resources in this stack
     cdk.Tags.of(this).add('Project', 'acorn-pups');
     cdk.Tags.of(this).add('Environment', props.environment);
-    cdk.Tags.of(this).add('Component', 'Monitoring');
+    cdk.Tags.of(this).add('Component', 'monitoring');
 
     // SNS Topic for alarms
     this.alarmTopic = new sns.Topic(this, 'AlarmTopic', {
