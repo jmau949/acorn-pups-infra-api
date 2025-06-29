@@ -21,7 +21,6 @@ export const handler = async (
   
   try {
     ResponseHandler.logRequest(event, context);
-    console.log("TESTESTESTT")
 
     // Basic health checks
     const healthData: HealthCheckResponse = {
