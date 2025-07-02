@@ -6,6 +6,7 @@ import * as sns from 'aws-cdk-lib/aws-sns';
 import * as snsSubscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import { Construct } from 'constructs';
 import { MonitoringStackProps } from './types';
+import { ParameterStoreHelper } from './parameter-store-helper';
 
 export class MonitoringStack extends cdk.Stack {
   public readonly dashboard: cloudwatch.Dashboard;
@@ -89,17 +90,38 @@ export class MonitoringStack extends cdk.Stack {
     // Create log insights queries for troubleshooting
     this.createLogInsightQueries(props);
 
-    // Outputs
-    new cdk.CfnOutput(this, 'DashboardUrl', {
-      value: `https://${this.region}.console.aws.amazon.com/cloudwatch/home?region=${this.region}#dashboards:name=${this.dashboard.dashboardName}`,
-      description: 'CloudWatch Dashboard URL',
+    // Initialize Parameter Store helper
+    const parameterHelper = new ParameterStoreHelper(this, {
+      environment: props.environment,
+      stackName: 'monitoring',
     });
 
-    new cdk.CfnOutput(this, 'AlarmTopicArn', {
-      value: this.alarmTopic.topicArn,
-      description: 'SNS Topic ARN for alarms',
-      exportName: `acorn-pups-${props.environment}-alarm-topic-arn`,
-    });
+    // Create outputs with corresponding Parameter Store parameters
+    parameterHelper.createMultipleOutputsWithParameters([
+      {
+        outputId: 'DashboardUrl',
+        value: `https://${this.region}.console.aws.amazon.com/cloudwatch/home?region=${this.region}#dashboards:name=${this.dashboard.dashboardName}`,
+        description: 'CloudWatch Dashboard URL',
+      },
+      {
+        outputId: 'AlarmTopicArn',
+        value: this.alarmTopic.topicArn,
+        description: 'SNS Topic ARN for alarms',
+        exportName: `acorn-pups-${props.environment}-alarm-topic-arn`,
+      },
+      {
+        outputId: 'DashboardName',
+        value: this.dashboard.dashboardName,
+        description: 'CloudWatch Dashboard name',
+        exportName: `acorn-pups-${props.environment}-dashboard-name`,
+      },
+      {
+        outputId: 'AlarmTopicName',
+        value: this.alarmTopic.topicName,
+        description: 'SNS Topic name for alarms',
+        exportName: `acorn-pups-${props.environment}-alarm-topic-name`,
+      },
+    ]);
   }
 
   private createApiGatewayMetrics(props: MonitoringStackProps) {

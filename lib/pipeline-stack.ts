@@ -6,6 +6,7 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import { Construct } from 'constructs';
 import { PipelineStackProps } from './types';
+import { ParameterStoreHelper } from './parameter-store-helper';
 
 export class PipelineStack extends cdk.Stack {
   public readonly pipeline: codepipeline.Pipeline;
@@ -183,23 +184,50 @@ export class PipelineStack extends cdk.Stack {
       ],
     });
 
-    // Outputs
-    new cdk.CfnOutput(this, 'PipelineName', {
-      value: this.pipeline.pipelineName,
-      description: 'CodePipeline name',
-      exportName: 'acorn-pups-pipeline-name',
+    // Initialize Parameter Store helper
+    const parameterHelper = new ParameterStoreHelper(this, {
+      environment: props.branch === 'master' ? 'prod' : 'dev',
+      stackName: 'pipeline',
     });
 
-    new cdk.CfnOutput(this, 'BuildProjectName', {
-      value: buildProject.projectName,
-      description: 'CodeBuild project name',
-      exportName: 'acorn-pups-build-project-name',
-    });
-
-    new cdk.CfnOutput(this, 'ArtifactsBucketName', {
-      value: artifactsBucket.bucketName,
-      description: 'S3 bucket for pipeline artifacts',
-      exportName: 'acorn-pups-artifacts-bucket-name',
-    });
+    // Create outputs with corresponding Parameter Store parameters
+    parameterHelper.createMultipleOutputsWithParameters([
+      {
+        outputId: 'PipelineName',
+        value: this.pipeline.pipelineName,
+        description: 'CodePipeline name',
+        exportName: 'acorn-pups-pipeline-name',
+      },
+      {
+        outputId: 'PipelineArn',
+        value: this.pipeline.pipelineArn,
+        description: 'CodePipeline ARN',
+        exportName: 'acorn-pups-pipeline-arn',
+      },
+      {
+        outputId: 'BuildProjectName',
+        value: buildProject.projectName,
+        description: 'CodeBuild project name',
+        exportName: 'acorn-pups-build-project-name',
+      },
+      {
+        outputId: 'BuildProjectArn',
+        value: buildProject.projectArn,
+        description: 'CodeBuild project ARN',
+        exportName: 'acorn-pups-build-project-arn',
+      },
+      {
+        outputId: 'ArtifactsBucketName',
+        value: artifactsBucket.bucketName,
+        description: 'S3 bucket for pipeline artifacts',
+        exportName: 'acorn-pups-artifacts-bucket-name',
+      },
+      {
+        outputId: 'ArtifactsBucketArn',
+        value: artifactsBucket.bucketArn,
+        description: 'S3 bucket ARN for pipeline artifacts',
+        exportName: 'acorn-pups-artifacts-bucket-arn',
+      },
+    ]);
   }
 } 

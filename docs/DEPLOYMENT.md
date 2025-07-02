@@ -40,8 +40,8 @@
 ### **1. Clone and Install Dependencies**
 ```powershell
 # Clone the repository
-git clone https://github.com/your-username/acorn-pups-infrastructure-api.git
-cd acorn-pups-infrastructure-api
+git clone https://github.com/your-username/acorn-pups-infra-api.git
+cd acorn-pups-infra-api
 
 # Verify Node.js version (must be v22+)
 node --version
@@ -150,7 +150,7 @@ In `lib/pipeline-stack.ts`, update:
 owner: 'your-github-username',
 
 // Line 33 & 157: Replace with your repository name  
-repo: 'acorn-pups-infrastructure-api',
+repo: 'acorn-pups-infra-api',
 ```
 
 ### **2. GitHub Token Setup**

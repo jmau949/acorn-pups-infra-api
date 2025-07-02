@@ -74,7 +74,7 @@ const monitoringStack = new MonitoringStack(app, `${stackPrefix}-monitoring`, {
 if (environment === 'prod') {
   new PipelineStack(app, `acorn-pups-pipeline`, {
     env,
-    repositoryName: 'acorn-pups-infrastructure-api',
+    repositoryName: 'acorn-pups-infra-api',
     branch: 'master',
   });
 }

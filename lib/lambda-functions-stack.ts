@@ -4,6 +4,7 @@ import * as logs from 'aws-cdk-lib/aws-logs';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 import { LambdaStackProps, LambdaFunctions } from './types';
+import { ParameterStoreHelper } from './parameter-store-helper';
 
 export class LambdaFunctionsStack extends cdk.Stack {
   public readonly functions: LambdaFunctions;
@@ -196,7 +197,16 @@ export class LambdaFunctionsStack extends cdk.Stack {
       cdk.Tags.of(func).add('Service', 'API');
     });
 
-    // Output function ARNs for reference
+    // Initialize Parameter Store helper
+    const parameterHelper = new ParameterStoreHelper(this, {
+      environment: props.environment,
+      stackName: 'lambda-functions',
+    });
+
+    // Create Lambda function parameters and outputs
+    parameterHelper.createLambdaFunctionParameters(this.functions, props.environment);
+
+    // Create traditional CloudFormation outputs for compatibility
     Object.entries(this.functions).forEach(([name, func]) => {
       new cdk.CfnOutput(this, `${name}FunctionArn`, {
         value: func.functionArn,
@@ -204,5 +214,13 @@ export class LambdaFunctionsStack extends cdk.Stack {
         exportName: `acorn-pups-${props.environment}-${name}-arn`,
       });
     });
+
+    // Create additional stack-level parameters
+    parameterHelper.createParameter(
+      'LambdaRoleArn',
+      lambdaRole.roleArn,
+      'Lambda execution role ARN',
+      `/acorn-pups/${props.environment}/lambda-functions/execution-role/arn`
+    );
   }
 }

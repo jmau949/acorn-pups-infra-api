@@ -5,6 +5,7 @@ import * as logs from 'aws-cdk-lib/aws-logs';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 import { ApiGatewayStackProps } from './types';
+import { ParameterStoreHelper } from './parameter-store-helper';
 
 export class ApiGatewayStack extends cdk.Stack {
   public readonly api: apigateway.RestApi;
@@ -322,24 +323,45 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
-    // Outputs
-    new cdk.CfnOutput(this, 'ApiUrl', {
-      value: this.api.url,
-      description: 'API Gateway URL',
-      exportName: `acorn-pups-${props.environment}-api-url`,
+    // Initialize Parameter Store helper
+    const parameterHelper = new ParameterStoreHelper(this, {
+      environment: props.environment,
+      stackName: 'api-gateway',
     });
 
-    new cdk.CfnOutput(this, 'ApiId', {
-      value: this.api.restApiId,
-      description: 'API Gateway ID',
-      exportName: `acorn-pups-${props.environment}-api-id`,
-    });
-
-    new cdk.CfnOutput(this, 'UsagePlanId', {
-      value: usagePlan.usagePlanId,
-      description: 'Usage Plan ID for API keys',
-      exportName: `acorn-pups-${props.environment}-usage-plan-id`,
-    });
+    // Create outputs with corresponding Parameter Store parameters
+    parameterHelper.createMultipleOutputsWithParameters([
+      {
+        outputId: 'ApiUrl',
+        value: this.api.url,
+        description: 'API Gateway URL',
+        exportName: `acorn-pups-${props.environment}-api-url`,
+      },
+      {
+        outputId: 'ApiId',
+        value: this.api.restApiId,
+        description: 'API Gateway ID',
+        exportName: `acorn-pups-${props.environment}-api-id`,
+      },
+      {
+        outputId: 'UsagePlanId',
+        value: usagePlan.usagePlanId,
+        description: 'Usage Plan ID for API keys',
+        exportName: `acorn-pups-${props.environment}-usage-plan-id`,
+      },
+      {
+        outputId: 'ApiName',
+        value: this.api.restApiName,
+        description: 'API Gateway name',
+        exportName: `acorn-pups-${props.environment}-api-name`,
+      },
+      {
+        outputId: 'ApiStage',
+        value: props.apiGatewayStageName,
+        description: 'API Gateway deployment stage',
+        exportName: `acorn-pups-${props.environment}-api-stage`,
+      },
+    ]);
   }
 
   private configureGatewayResponses() {

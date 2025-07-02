@@ -1,9 +1,9 @@
 {
-  "name": "acorn-pups-infrastructure-api",
+  "name": "acorn-pups-infra-api",
   "version": "1.0.0",
   "description": "AWS CDK Infrastructure for Acorn Pups API Gateway and routing service",
   "bin": {
-    "acorn-pups-infrastructure-api": "bin/app.js"
+    "acorn-pups-infra-api": "bin/app.js"
   },
   "scripts": {
     "build": "tsc",

@@ -53,8 +53,8 @@ Based on `reqApi.md`, here's the current implementation status:
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/your-org/acorn-pups-infrastructure-api.git
-   cd acorn-pups-infrastructure-api
+   git clone https://github.com/your-org/acorn-pups-infra-api.git
+   cd acorn-pups-infra-api
    ```
 
 2. **Install dependencies**
@@ -129,7 +129,7 @@ Use the provided OpenAPI specification with tools like:
 ## 📁 Repository Structure
 
 ```
-acorn-pups-infrastructure-api/
+acorn-pups-infra-api/
 ├── lib/                          # CDK stack definitions
 │   ├── api-gateway-stack.ts      # API Gateway with all routes
 │   ├── lambda-functions-stack.ts # Lambda functions and layers
