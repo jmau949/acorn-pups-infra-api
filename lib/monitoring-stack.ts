@@ -202,23 +202,29 @@ export class MonitoringStack extends cdk.Stack {
           props.lambdaFunctions.registerDevice,
           props.lambdaFunctions.getUserDevices,
           props.lambdaFunctions.updateDeviceSettings,
-          props.lambdaFunctions.deleteDevice,
+          props.lambdaFunctions.updateDeviceStatus,
+          props.lambdaFunctions.resetDevice,
         ],
       },
       {
-        title: 'Device Status Functions', 
+        title: 'Invitation Management Functions', 
         functions: [
-          props.lambdaFunctions.getDeviceStatus,
-          props.lambdaFunctions.getDeviceHistory,
+          props.lambdaFunctions.inviteUser,
+          props.lambdaFunctions.acceptInvitation,
+          props.lambdaFunctions.declineInvitation,
+          props.lambdaFunctions.getUserInvitations,
         ],
       },
       {
         title: 'User Management Functions',
         functions: [
-          props.lambdaFunctions.inviteUser,
-          props.lambdaFunctions.removeUser,
-          props.lambdaFunctions.getDeviceUsers,
-          props.lambdaFunctions.updateUserPreferences,
+          props.lambdaFunctions.removeUserAccess,
+        ],
+      },
+      {
+        title: 'IoT Event Processing Functions',
+        functions: [
+          props.lambdaFunctions.handleButtonPress,
         ],
       },
     ];

@@ -133,28 +133,20 @@ export class LambdaFunctionsStack extends cdk.Stack {
         description: 'Update device configuration and settings',
       }),
 
-      deleteDevice: new lambda.Function(this, 'DeleteDeviceFunction', {
+      updateDeviceStatus: new lambda.Function(this, 'UpdateDeviceStatusFunction', {
         ...commonFunctionProps,
-        functionName: `acorn-pups-${props.environment}-delete-device`,
-        code: createBundledCode('delete-device'),
+        functionName: `acorn-pups-${props.environment}-update-device-status`,
+        code: createBundledCode('update-device-status'),
         handler: 'index.handler',
-        description: 'Remove a device and all associated data',
+        description: 'Process device status updates from ESP32 receivers and update DeviceStatus table',
       }),
 
-      getDeviceStatus: new lambda.Function(this, 'GetDeviceStatusFunction', {
+      resetDevice: new lambda.Function(this, 'ResetDeviceFunction', {
         ...commonFunctionProps,
-        functionName: `acorn-pups-${props.environment}-get-device-status`,
-        code: createBundledCode('get-device-status'),
+        functionName: `acorn-pups-${props.environment}-reset-device`,
+        code: createBundledCode('reset-device'),
         handler: 'index.handler',
-        description: 'Get current status and connectivity of a device',
-      }),
-
-      getDeviceHistory: new lambda.Function(this, 'GetDeviceHistoryFunction', {
-        ...commonFunctionProps,
-        functionName: `acorn-pups-${props.environment}-get-device-history`,
-        code: createBundledCode('get-device-history'),
-        handler: 'index.handler',
-        description: 'Get button press history for a device',
+        description: 'Factory reset device and clear all data',
       }),
 
       // User Management Functions
@@ -166,28 +158,47 @@ export class LambdaFunctionsStack extends cdk.Stack {
         description: 'Invite a user to access a device',
       }),
 
-      removeUser: new lambda.Function(this, 'RemoveUserFunction', {
+      removeUserAccess: new lambda.Function(this, 'RemoveUserAccessFunction', {
         ...commonFunctionProps,
-        functionName: `acorn-pups-${props.environment}-remove-user`,
+        functionName: `acorn-pups-${props.environment}-remove-user-access`,
         code: createBundledCode('remove-user'),
         handler: 'index.handler',
         description: 'Remove user access from a device',
       }),
 
-      getDeviceUsers: new lambda.Function(this, 'GetDeviceUsersFunction', {
+      getUserInvitations: new lambda.Function(this, 'GetUserInvitationsFunction', {
         ...commonFunctionProps,
-        functionName: `acorn-pups-${props.environment}-get-device-users`,
-        code: createBundledCode('get-device-users'),
+        functionName: `acorn-pups-${props.environment}-get-user-invitations`,
+        code: createBundledCode('get-user-invitations'),
         handler: 'index.handler',
-        description: 'Get all users with access to a device',
+        description: 'Get pending invitations for a user',
       }),
 
-      updateUserPreferences: new lambda.Function(this, 'UpdateUserPreferencesFunction', {
+      // Invitation Management Functions
+      acceptInvitation: new lambda.Function(this, 'AcceptInvitationFunction', {
         ...commonFunctionProps,
-        functionName: `acorn-pups-${props.environment}-update-user-preferences`,
-        code: createBundledCode('update-user-preferences'),
+        functionName: `acorn-pups-${props.environment}-accept-invitation`,
+        code: createBundledCode('accept-invitation'),
         handler: 'index.handler',
-        description: 'Update user notification and app preferences',
+        description: 'Accept device invitation',
+      }),
+
+      declineInvitation: new lambda.Function(this, 'DeclineInvitationFunction', {
+        ...commonFunctionProps,
+        functionName: `acorn-pups-${props.environment}-decline-invitation`,
+        code: createBundledCode('decline-invitation'),
+        handler: 'index.handler',
+        description: 'Decline device invitation',
+      }),
+
+      // IoT Event Processing Functions
+      handleButtonPress: new lambda.Function(this, 'HandleButtonPressFunction', {
+        ...commonFunctionProps,
+        functionName: `acorn-pups-${props.environment}-handle-button-press`,
+        code: createBundledCode('handle-button-press'),
+        handler: 'index.handler',
+        description: 'Process button press events and trigger notifications',
+        timeout: cdk.Duration.seconds(60),
       }),
     };
 

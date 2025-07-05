@@ -219,17 +219,9 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
-    // DELETE /devices/{deviceId}
+    // Device-specific routes
     const deviceResource = devicesResource.addResource('{deviceId}');
-    deviceResource.addMethod('DELETE',
-      new apigateway.LambdaIntegration(props.lambdaFunctions.deleteDevice, lambdaIntegrationOptions),
-      {
-        methodResponses,
-        requestValidator,
-        // TODO: Add Cognito authorizer
-      }
-    );
-
+    
     // PUT /devices/{deviceId}/settings
     const settingsResource = deviceResource.addResource('settings');
     settingsResource.addMethod('PUT',
@@ -241,10 +233,10 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
-    // GET /devices/{deviceId}/status
-    const statusResource = deviceResource.addResource('status');
-    statusResource.addMethod('GET',
-      new apigateway.LambdaIntegration(props.lambdaFunctions.getDeviceStatus, lambdaIntegrationOptions),
+    // POST /devices/{deviceId}/reset
+    const resetResource = deviceResource.addResource('reset');
+    resetResource.addMethod('POST',
+      new apigateway.LambdaIntegration(props.lambdaFunctions.resetDevice, lambdaIntegrationOptions),
       {
         methodResponses,
         requestValidator,
@@ -252,10 +244,22 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
-    // GET /devices/{deviceId}/history
-    const historyResource = deviceResource.addResource('history');
-    historyResource.addMethod('GET',
-      new apigateway.LambdaIntegration(props.lambdaFunctions.getDeviceHistory, lambdaIntegrationOptions),
+    // POST /devices/{deviceId}/invite
+    const inviteResource = deviceResource.addResource('invite');
+    inviteResource.addMethod('POST',
+      new apigateway.LambdaIntegration(props.lambdaFunctions.inviteUser, lambdaIntegrationOptions),
+      {
+        methodResponses,
+        requestValidator,
+        // TODO: Add Cognito authorizer
+      }
+    );
+
+    // DELETE /devices/{deviceId}/users/{userId}
+    const deviceUsersResource = deviceResource.addResource('users');
+    const deviceUserResource = deviceUsersResource.addResource('{userId}');
+    deviceUserResource.addMethod('DELETE',
+      new apigateway.LambdaIntegration(props.lambdaFunctions.removeUserAccess, lambdaIntegrationOptions),
       {
         methodResponses,
         requestValidator,
@@ -278,10 +282,10 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
-    // PUT /users/{userId}/preferences  
-    const preferencesResource = userResource.addResource('preferences');
-    preferencesResource.addMethod('PUT',
-      new apigateway.LambdaIntegration(props.lambdaFunctions.updateUserPreferences, lambdaIntegrationOptions),
+    // GET /users/{userId}/invitations
+    const userInvitationsResource = userResource.addResource('invitations');
+    userInvitationsResource.addMethod('GET',
+      new apigateway.LambdaIntegration(props.lambdaFunctions.getUserInvitations, lambdaIntegrationOptions),
       {
         methodResponses,
         requestValidator,
@@ -289,11 +293,14 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
-    // Device user management routes
-    // POST /devices/{deviceId}/invite
-    const inviteResource = deviceResource.addResource('invite');
-    inviteResource.addMethod('POST',
-      new apigateway.LambdaIntegration(props.lambdaFunctions.inviteUser, lambdaIntegrationOptions),
+    // Invitation management routes
+    const invitationsResource = this.api.root.addResource('invitations');
+    
+    // POST /invitations/{invitationId}/accept
+    const invitationResource = invitationsResource.addResource('{invitationId}');
+    const acceptResource = invitationResource.addResource('accept');
+    acceptResource.addMethod('POST',
+      new apigateway.LambdaIntegration(props.lambdaFunctions.acceptInvitation, lambdaIntegrationOptions),
       {
         methodResponses,
         requestValidator,
@@ -301,21 +308,10 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
-    // GET /devices/{deviceId}/users
-    const deviceUsersResource = deviceResource.addResource('users');
-    deviceUsersResource.addMethod('GET',
-      new apigateway.LambdaIntegration(props.lambdaFunctions.getDeviceUsers, lambdaIntegrationOptions),
-      {
-        methodResponses,
-        requestValidator,
-        // TODO: Add Cognito authorizer
-      }
-    );
-
-    // DELETE /devices/{deviceId}/users/{userId}
-    const deviceUserResource = deviceUsersResource.addResource('{userId}');
-    deviceUserResource.addMethod('DELETE',
-      new apigateway.LambdaIntegration(props.lambdaFunctions.removeUser, lambdaIntegrationOptions),
+    // POST /invitations/{invitationId}/decline
+    const declineResource = invitationResource.addResource('decline');
+    declineResource.addMethod('POST',
+      new apigateway.LambdaIntegration(props.lambdaFunctions.declineInvitation, lambdaIntegrationOptions),
       {
         methodResponses,
         requestValidator,

@@ -35,15 +35,20 @@ export interface LambdaFunctions {
   registerDevice: lambda.Function;
   getUserDevices: lambda.Function;
   updateDeviceSettings: lambda.Function;
-  deleteDevice: lambda.Function;
-  getDeviceStatus: lambda.Function;
-  getDeviceHistory: lambda.Function;
+  updateDeviceStatus: lambda.Function;
+  resetDevice: lambda.Function;
   
   // User Management  
   inviteUser: lambda.Function;
-  removeUser: lambda.Function;
-  getDeviceUsers: lambda.Function;
-  updateUserPreferences: lambda.Function;
+  removeUserAccess: lambda.Function;
+  getUserInvitations: lambda.Function;
+  
+  // Invitation Management
+  acceptInvitation: lambda.Function;
+  declineInvitation: lambda.Function;
+  
+  // IoT Event Processing
+  handleButtonPress: lambda.Function;
 }
 
 export interface ApiErrorResponse {
