@@ -6,8 +6,8 @@ info:
     
     This API provides endpoints for:
     - Device registration and management
-    - User access control
-    - Button press history and notifications
+    - User access control and invitations
+    - Device settings and reset functionality
     - Health monitoring
     
     ## Authentication
@@ -17,6 +17,12 @@ info:
     ## Rate Limiting
     - Development: 100 requests/second, 200 burst
     - Production: 1000 requests/second, 2000 burst
+    
+    ## System Architecture
+    - RF buttons send signals directly to ESP32 receivers (no API involvement)
+    - ESP32 receivers process button presses in real-time
+    - Push notifications sent to all authorized users
+    - No persistent storage of button press events (MVP)
     
   version: 1.0.0
   contact:
@@ -60,7 +66,7 @@ paths:
   /devices/register:
     post:
       summary: Register a new device
-      description: Register a new Acorn Pups device for the authenticated user
+      description: Register a new ESP32 receiver device for the authenticated user
       tags:
         - Device Management
       requestBody:
@@ -125,7 +131,7 @@ paths:
   /devices/{deviceId}/settings:
     put:
       summary: Update device settings
-      description: Update configuration settings for a specific device
+      description: Update configuration settings for a specific ESP32 receiver device
       tags:
         - Device Management
       parameters:
@@ -165,37 +171,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /devices/{deviceId}:
-    delete:
-      summary: Delete a device
-      description: Remove a device and all associated data
-      tags:
-        - Device Management
-      parameters:
-        - name: deviceId
-          in: path
-          required: true
-          schema:
-            type: string
-          description: Device ID
-      responses:
-        '204':
-          description: Device deleted successfully
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          description: Device not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /devices/{deviceId}/status:
-    get:
-      summary: Get device status
-      description: Get current connectivity and status of a device
+  /devices/{deviceId}/reset:
+    post:
+      summary: Reset device
+      description: Initiate factory reset of an ESP32 receiver device and clean up all associated data
       tags:
         - Device Management
       parameters:
@@ -207,62 +186,11 @@ paths:
           description: Device ID
       responses:
         '200':
-          description: Device status
+          description: Device reset initiated successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DeviceStatusResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          description: Device not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /devices/{deviceId}/history:
-    get:
-      summary: Get device button press history
-      description: Retrieve button press history for a device
-      tags:
-        - Device Management
-      parameters:
-        - name: deviceId
-          in: path
-          required: true
-          schema:
-            type: string
-          description: Device ID
-        - name: limit
-          in: query
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 50
-          description: Maximum number of records to return
-        - name: startTime
-          in: query
-          schema:
-            type: string
-            format: date-time
-          description: Start time for history query (ISO 8601)
-        - name: endTime
-          in: query
-          schema:
-            type: string
-            format: date-time
-          description: End time for history query (ISO 8601)
-      responses:
-        '200':
-          description: Button press history
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeviceHistoryResponse'
+                $ref: '#/components/schemas/DeviceResetResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -317,37 +245,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /devices/{deviceId}/users:
-    get:
-      summary: Get device users
-      description: Get all users with access to a device
-      tags:
-        - User Management
-      parameters:
-        - name: deviceId
-          in: path
-          required: true
-          schema:
-            type: string
-          description: Device ID
-      responses:
-        '200':
-          description: List of users with device access
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeviceUsersResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          description: Device not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
   /devices/{deviceId}/users/{userId}:
     delete:
       summary: Remove user access from device
@@ -381,10 +278,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /users/{userId}/preferences:
-    put:
-      summary: Update user preferences
-      description: Update notification and app preferences for a user
+  /users/{userId}/invitations:
+    get:
+      summary: Get user's pending invitations
+      description: Retrieve all pending device invitations for the specified user
       tags:
         - User Management
       parameters:
@@ -394,29 +291,93 @@ paths:
           schema:
             type: string
           description: User ID
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UserPreferencesRequest'
       responses:
         '200':
-          description: Preferences updated successfully
+          description: List of user's pending invitations
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserPreferencesResponse'
-        '400':
-          description: Invalid preferences
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/UserInvitationsResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /invitations/{invitationId}/accept:
+    post:
+      summary: Accept device invitation
+      description: Accept an invitation to access a device
+      tags:
+        - User Management
+      parameters:
+        - name: invitationId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Invitation ID
+      responses:
+        '200':
+          description: Invitation accepted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationActionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Invitation not found or expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Invitation already processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /invitations/{invitationId}/decline:
+    post:
+      summary: Decline device invitation
+      description: Decline an invitation to access a device
+      tags:
+        - User Management
+      parameters:
+        - name: invitationId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Invitation ID
+      responses:
+        '200':
+          description: Invitation declined successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationActionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Invitation not found or expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Invitation already processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 components:
   securitySchemes:
@@ -513,25 +474,25 @@ components:
       properties:
         deviceId:
           type: string
-          description: Unique device identifier
-          example: "ACORN_001_ABC123"
+          description: Unique device identifier for ESP32 receiver
+          example: "acorn-receiver-001"
         deviceName:
           type: string
           description: Human-readable device name
-          example: "Buddy's Button"
-        deviceType:
+          example: "Living Room Receiver"
+        serialNumber:
           type: string
-          description: Device model/type
-          example: "acorn-button-v1"
-        userId:
+          description: Hardware serial number
+          example: "SN123456789"
+        macAddress:
           type: string
-          description: Owner user ID
-          example: "user-123"
+          description: Device MAC address
+          example: "AA:BB:CC:DD:EE:FF"
       required:
         - deviceId
         - deviceName
-        - deviceType
-        - userId
+        - serialNumber
+        - macAddress
 
     DeviceRegistrationResponse:
       allOf:
@@ -545,7 +506,7 @@ components:
                   type: string
                 deviceName:
                   type: string
-                deviceType:
+                serialNumber:
                   type: string
                 ownerId:
                   type: string
@@ -555,6 +516,18 @@ components:
                 status:
                   type: string
                   enum: [pending, active]
+                certificates:
+                  type: object
+                  properties:
+                    deviceCertificate:
+                      type: string
+                      description: AWS IoT Core device certificate (PEM format)
+                    privateKey:
+                      type: string
+                      description: Device private key (PEM format)
+                    iotEndpoint:
+                      type: string
+                      description: AWS IoT Core endpoint URL
 
     Device:
       type: object
@@ -563,35 +536,61 @@ components:
           type: string
         deviceName:
           type: string
-        deviceType:
+        serialNumber:
           type: string
-        status:
-          type: string
-          enum: [online, offline, pending]
+        isOnline:
+          type: boolean
         lastSeen:
           type: string
           format: date-time
         registeredAt:
           type: string
           format: date-time
+        firmwareVersion:
+          type: string
         settings:
           $ref: '#/components/schemas/DeviceSettings'
+        permissions:
+          type: object
+          properties:
+            notifications:
+              type: boolean
+            settings:
+              type: boolean
 
     DeviceSettings:
       type: object
       properties:
-        buttonSensitivity:
+        soundEnabled:
+          type: boolean
+          description: Whether device makes sounds
+        soundVolume:
           type: integer
           minimum: 1
           maximum: 10
-          description: Button sensitivity level (1-10)
-        notificationPreferences:
-          type: object
-          properties:
-            pushEnabled:
-              type: boolean
-            emailEnabled:
-              type: boolean
+          description: Device sound volume (1-10 scale)
+        ledBrightness:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: LED brightness level (1-10 scale)
+        notificationCooldown:
+          type: integer
+          minimum: 0
+          description: Seconds between notifications
+        quietHoursEnabled:
+          type: boolean
+          description: Whether quiet hours are active
+        quietHoursStart:
+          type: string
+          pattern: '^([01]?[0-9]|2[0-3]):[0-5][0-9]$'
+          example: "22:00"
+          description: Time to stop ringing locally
+        quietHoursEnd:
+          type: string
+          pattern: '^([01]?[0-9]|2[0-3]):[0-5][0-9]$'
+          example: "07:00"
+          description: Time to resume ringing locally
 
     UserDevicesResponse:
       allOf:
@@ -611,17 +610,27 @@ components:
     DeviceSettingsRequest:
       type: object
       properties:
-        buttonSensitivity:
+        soundEnabled:
+          type: boolean
+        soundVolume:
           type: integer
           minimum: 1
           maximum: 10
-        notificationPreferences:
-          type: object
-          properties:
-            pushEnabled:
-              type: boolean
-            emailEnabled:
-              type: boolean
+        ledBrightness:
+          type: integer
+          minimum: 1
+          maximum: 10
+        notificationCooldown:
+          type: integer
+          minimum: 0
+        quietHoursEnabled:
+          type: boolean
+        quietHoursStart:
+          type: string
+          pattern: '^([01]?[0-9]|2[0-3]):[0-5][0-9]$'
+        quietHoursEnd:
+          type: string
+          pattern: '^([01]?[0-9]|2[0-3]):[0-5][0-9]$'
 
     DeviceSettingsResponse:
       allOf:
@@ -631,7 +640,7 @@ components:
             data:
               $ref: '#/components/schemas/DeviceSettings'
 
-    DeviceStatusResponse:
+    DeviceResetResponse:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
         - type: object
@@ -641,59 +650,12 @@ components:
               properties:
                 deviceId:
                   type: string
-                status:
+                message:
                   type: string
-                  enum: [online, offline, pending]
-                lastSeen:
+                  example: "Device reset initiated successfully"
+                resetInitiatedAt:
                   type: string
                   format: date-time
-                batteryLevel:
-                  type: integer
-                  minimum: 0
-                  maximum: 100
-                signalStrength:
-                  type: integer
-                  minimum: -100
-                  maximum: 0
-                firmwareVersion:
-                  type: string
-
-    ButtonPress:
-      type: object
-      properties:
-        timestamp:
-          type: string
-          format: date-time
-        duration:
-          type: integer
-          description: Press duration in milliseconds
-        batteryLevel:
-          type: integer
-          minimum: 0
-          maximum: 100
-        signalStrength:
-          type: integer
-          minimum: -100
-          maximum: 0
-
-    DeviceHistoryResponse:
-      allOf:
-        - $ref: '#/components/schemas/SuccessResponse'
-        - type: object
-          properties:
-            data:
-              type: object
-              properties:
-                deviceId:
-                  type: string
-                presses:
-                  type: array
-                  items:
-                    $ref: '#/components/schemas/ButtonPress'
-                total:
-                  type: integer
-                hasMore:
-                  type: boolean
 
     UserInviteRequest:
       type: object
@@ -702,13 +664,16 @@ components:
           type: string
           format: email
           description: Email address of user to invite
-        role:
-          type: string
-          enum: [owner, viewer]
-          description: Access level for the invited user
+        notificationsPermission:
+          type: boolean
+          description: Can receive notifications from this device
+          default: true
+        settingsPermission:
+          type: boolean
+          description: Can modify device settings
+          default: false
       required:
         - email
-        - role
 
     UserInviteResponse:
       allOf:
@@ -718,37 +683,49 @@ components:
             data:
               type: object
               properties:
-                inviteId:
+                invitationId:
                   type: string
                 email:
                   type: string
-                role:
+                deviceId:
                   type: string
-                status:
+                deviceName:
                   type: string
-                  enum: [pending, accepted, expired]
+                notificationsPermission:
+                  type: boolean
+                settingsPermission:
+                  type: boolean
                 expiresAt:
                   type: string
                   format: date-time
+                sentAt:
+                  type: string
+                  format: date-time
 
-    DeviceUser:
+    Invitation:
       type: object
       properties:
-        userId:
+        invitationId:
           type: string
-        email:
+        deviceId:
           type: string
-        role:
+        deviceName:
           type: string
-          enum: [owner, viewer]
-        addedAt:
+        invitedBy:
+          type: string
+          description: Name/email of user who sent invitation
+        notificationsPermission:
+          type: boolean
+        settingsPermission:
+          type: boolean
+        createdAt:
           type: string
           format: date-time
-        lastActive:
+        expiresAt:
           type: string
           format: date-time
 
-    DeviceUsersResponse:
+    UserInvitationsResponse:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
         - type: object
@@ -756,49 +733,14 @@ components:
             data:
               type: object
               properties:
-                deviceId:
-                  type: string
-                users:
+                invitations:
                   type: array
                   items:
-                    $ref: '#/components/schemas/DeviceUser'
+                    $ref: '#/components/schemas/Invitation'
                 total:
                   type: integer
 
-    UserPreferencesRequest:
-      type: object
-      properties:
-        notifications:
-          type: object
-          properties:
-            pushEnabled:
-              type: boolean
-            emailEnabled:
-              type: boolean
-            quietHours:
-              type: object
-              properties:
-                enabled:
-                  type: boolean
-                startTime:
-                  type: string
-                  pattern: '^([01]?[0-9]|2[0-3]):[0-5][0-9]$'
-                  example: "22:00"
-                endTime:
-                  type: string
-                  pattern: '^([01]?[0-9]|2[0-3]):[0-5][0-9]$'
-                  example: "08:00"
-        app:
-          type: object
-          properties:
-            theme:
-              type: string
-              enum: [light, dark, auto]
-            language:
-              type: string
-              example: "en-US"
-
-    UserPreferencesResponse:
+    InvitationActionResponse:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
         - type: object
@@ -806,20 +748,25 @@ components:
             data:
               type: object
               properties:
-                userId:
+                invitationId:
                   type: string
-                notifications:
-                  type: object
-                app:
-                  type: object
-                updatedAt:
+                action:
+                  type: string
+                  enum: [accepted, declined]
+                message:
+                  type: string
+                processedAt:
                   type: string
                   format: date-time
+                deviceId:
+                  type: string
+                deviceName:
+                  type: string
 
 tags:
   - name: System
     description: System health and status endpoints
   - name: Device Management
-    description: Device registration, settings, and status
+    description: ESP32 receiver registration, settings, and reset functionality
   - name: User Management
-    description: User access control and preferences 
+    description: User access control, invitations, and device sharing 
