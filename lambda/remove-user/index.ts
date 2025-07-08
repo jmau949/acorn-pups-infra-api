@@ -10,38 +10,31 @@ export const handler = async (
   try {
     ResponseHandler.logRequest(event, context);
 
-    const deviceId = event.pathParameters?.deviceId;
-    const userId = event.pathParameters?.userId;
-
+    // Get deviceId and userId from path parameters
+    const deviceId = ResponseHandler.getPathParameter(event, 'deviceId');
+    const userId = ResponseHandler.getPathParameter(event, 'userId');
+    
     if (!deviceId) {
-      return ResponseHandler.badRequest('Missing deviceId parameter', requestId);
+      return ResponseHandler.badRequest('deviceId path parameter is required', requestId);
     }
-
+    
     if (!userId) {
-      return ResponseHandler.badRequest('Missing userId parameter', requestId);
+      return ResponseHandler.badRequest('userId path parameter is required', requestId);
     }
 
-    // TODO: Validate current user has permission to remove others from this device
-    // TODO: Check if device exists
-    // TODO: Check if target user has access to the device
-    // TODO: Prevent removing the last owner
-    // TODO: Remove user access from DynamoDB
+    // TODO: Verify requesting user has permission to remove users from this device (must be owner/admin)
+    // TODO: Check if device exists (return 404 if not)
+    // TODO: Check if user to be removed exists (return 404 if not)
+    // TODO: Check if user has access to device (return 404 if not)
+    // TODO: Remove user access from DeviceUsers table in DynamoDB
     // TODO: Send notification to removed user
 
-    console.log(`User access removed: ${userId} from device: ${deviceId}`);
+    console.log(`Removed user ${userId} access from device: ${deviceId}`);
 
-    // Return 204 No Content for successful removal
-    const response = {
-      statusCode: 204,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': '*',
-        'X-Request-ID': requestId,
-      },
-      body: '',
-    };
-
+    // Return 204 No Content for successful deletion
+    const response = ResponseHandler.noContent(requestId);
     ResponseHandler.logResponse(response, requestId);
+    
     return response;
   } catch (error) {
     console.error('Remove user access failed:', error);

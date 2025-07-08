@@ -1,20 +1,54 @@
-import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { ResponseHandler } from '../shared/response-handler';
+import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
+import ResponseHandler from '../shared/response-handler';
+import { DeviceResetResponse } from '../../lib/types';
 
-export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+export const handler = async (
+  event: APIGatewayProxyEvent,
+  context: Context
+): Promise<APIGatewayProxyResult> => {
+  const requestId = ResponseHandler.getRequestId(event);
+  
   try {
-    const requestId = ResponseHandler.getRequestId(event);
+    ResponseHandler.logRequest(event, context);
+
+    // Get deviceId from path parameters
+    const deviceId = ResponseHandler.getPathParameter(event, 'deviceId');
+    if (!deviceId) {
+      return ResponseHandler.badRequest('deviceId path parameter is required', requestId);
+    }
+
+    // TODO: Verify user has permission to reset this device (must be owner)
+    // TODO: Check if device exists (return 404 if not)
+    // TODO: Publish reset command to MQTT topic
+    // TODO: Update device status to "resetting" in DynamoDB
+    // TODO: Clean up IoT certificates and thing
+    // TODO: Remove all DeviceUsers entries
+    // TODO: Send notifications to affected users
+
+    const resetInitiatedAt = new Date().toISOString();
+
+    // Mock response for now
+    const resetResponse: DeviceResetResponse = {
+      deviceId,
+      message: 'Device reset initiated successfully',
+      resetInitiatedAt,
+    };
+
+    console.log(`Device reset initiated for device: ${deviceId} at ${resetInitiatedAt}`);
+
+    const response = ResponseHandler.success(resetResponse, requestId);
+    ResponseHandler.logResponse(response, requestId);
     
-    // TODO: Implement device reset logic
-    // 1. Validate user permissions
-    // 2. Send reset command to device via IoT Core
-    // 3. Clean up database records
-    // 4. Delete IoT Thing and certificate
-    
-    return ResponseHandler.success({ message: 'Device reset initiated successfully' }, requestId);
+    return response;
   } catch (error) {
-    console.error('Error resetting device:', error);
-    const requestId = ResponseHandler.getRequestId(event);
-    return ResponseHandler.internalError('Failed to reset device', requestId);
+    console.error('Device reset failed:', error);
+    
+    const response = ResponseHandler.internalError(
+      'Failed to initiate device reset',
+      requestId
+    );
+    ResponseHandler.logResponse(response, requestId);
+    
+    return response;
   }
 }; 

@@ -42,10 +42,12 @@ export class ApiGatewayStack extends cdk.Stack {
           'X-Amz-Security-Token',
           'X-Amz-User-Agent',
           'X-Requested-With',
+          'X-Correlation-ID',
+          'X-Client-Version',
         ],
         exposeHeaders: [
           'X-Request-ID',
-          'X-Amz-Request-Id',
+          'X-API-Version',
         ],
         allowCredentials: true,
         maxAge: cdk.Duration.hours(1),
@@ -92,7 +94,7 @@ export class ApiGatewayStack extends cdk.Stack {
       validateRequestParameters: true,
     });
 
-    // Lambda integration options with request ID
+    // Lambda integration options with request ID and new headers
     const lambdaIntegrationOptions: apigateway.LambdaIntegrationOptions = {
       requestTemplates: {
         'application/json': JSON.stringify({
@@ -121,8 +123,10 @@ export class ApiGatewayStack extends cdk.Stack {
           statusCode: '200',
           responseParameters: {
             'method.response.header.Access-Control-Allow-Origin': "'*'",
-            'method.response.header.Access-Control-Allow-Headers': "'*'",
+            'method.response.header.Access-Control-Allow-Headers': "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent,X-Requested-With,X-Correlation-ID,X-Client-Version'",
+            'method.response.header.Access-Control-Expose-Headers': "'X-Request-ID,X-API-Version'",
             'method.response.header.X-Request-ID': 'context.requestId',
+            'method.response.header.X-API-Version': "'1.0.0'",
           },
         },
         {
@@ -130,8 +134,10 @@ export class ApiGatewayStack extends cdk.Stack {
           selectionPattern: '4\\d{2}',
           responseParameters: {
             'method.response.header.Access-Control-Allow-Origin': "'*'",
-            'method.response.header.Access-Control-Allow-Headers': "'*'",
+            'method.response.header.Access-Control-Allow-Headers': "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent,X-Requested-With,X-Correlation-ID,X-Client-Version'",
+            'method.response.header.Access-Control-Expose-Headers': "'X-Request-ID,X-API-Version'",
             'method.response.header.X-Request-ID': 'context.requestId',
+            'method.response.header.X-API-Version': "'1.0.0'",
           },
         },
         {
@@ -139,21 +145,45 @@ export class ApiGatewayStack extends cdk.Stack {
           selectionPattern: '5\\d{2}',
           responseParameters: {
             'method.response.header.Access-Control-Allow-Origin': "'*'",
-            'method.response.header.Access-Control-Allow-Headers': "'*'",
+            'method.response.header.Access-Control-Allow-Headers': "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent,X-Requested-With,X-Correlation-ID,X-Client-Version'",
+            'method.response.header.Access-Control-Expose-Headers': "'X-Request-ID,X-API-Version'",
             'method.response.header.X-Request-ID': 'context.requestId',
+            'method.response.header.X-API-Version': "'1.0.0'",
           },
         },
       ],
     };
 
-    // Method response template with CORS headers
+    // Method response template with CORS headers and new headers
     const methodResponses: apigateway.MethodResponse[] = [
       {
         statusCode: '200',
         responseParameters: {
           'method.response.header.Access-Control-Allow-Origin': true,
           'method.response.header.Access-Control-Allow-Headers': true,
+          'method.response.header.Access-Control-Expose-Headers': true,
           'method.response.header.X-Request-ID': true,
+          'method.response.header.X-API-Version': true,
+        },
+      },
+      {
+        statusCode: '201',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Origin': true,
+          'method.response.header.Access-Control-Allow-Headers': true,
+          'method.response.header.Access-Control-Expose-Headers': true,
+          'method.response.header.X-Request-ID': true,
+          'method.response.header.X-API-Version': true,
+        },
+      },
+      {
+        statusCode: '204',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Origin': true,
+          'method.response.header.Access-Control-Allow-Headers': true,
+          'method.response.header.Access-Control-Expose-Headers': true,
+          'method.response.header.X-Request-ID': true,
+          'method.response.header.X-API-Version': true,
         },
       },
       {
@@ -161,7 +191,49 @@ export class ApiGatewayStack extends cdk.Stack {
         responseParameters: {
           'method.response.header.Access-Control-Allow-Origin': true,
           'method.response.header.Access-Control-Allow-Headers': true,
+          'method.response.header.Access-Control-Expose-Headers': true,
           'method.response.header.X-Request-ID': true,
+          'method.response.header.X-API-Version': true,
+        },
+      },
+      {
+        statusCode: '401',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Origin': true,
+          'method.response.header.Access-Control-Allow-Headers': true,
+          'method.response.header.Access-Control-Expose-Headers': true,
+          'method.response.header.X-Request-ID': true,
+          'method.response.header.X-API-Version': true,
+        },
+      },
+      {
+        statusCode: '403',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Origin': true,
+          'method.response.header.Access-Control-Allow-Headers': true,
+          'method.response.header.Access-Control-Expose-Headers': true,
+          'method.response.header.X-Request-ID': true,
+          'method.response.header.X-API-Version': true,
+        },
+      },
+      {
+        statusCode: '404',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Origin': true,
+          'method.response.header.Access-Control-Allow-Headers': true,
+          'method.response.header.Access-Control-Expose-Headers': true,
+          'method.response.header.X-Request-ID': true,
+          'method.response.header.X-API-Version': true,
+        },
+      },
+      {
+        statusCode: '409',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Origin': true,
+          'method.response.header.Access-Control-Allow-Headers': true,
+          'method.response.header.Access-Control-Expose-Headers': true,
+          'method.response.header.X-Request-ID': true,
+          'method.response.header.X-API-Version': true,
         },
       },
       {
@@ -169,7 +241,9 @@ export class ApiGatewayStack extends cdk.Stack {
         responseParameters: {
           'method.response.header.Access-Control-Allow-Origin': true,
           'method.response.header.Access-Control-Allow-Headers': true,
+          'method.response.header.Access-Control-Expose-Headers': true,
           'method.response.header.X-Request-ID': true,
+          'method.response.header.X-API-Version': true,
         },
       },
     ];
@@ -193,10 +267,13 @@ export class ApiGatewayStack extends cdk.Stack {
       },
     });
 
-    // ==== ROUTE DEFINITIONS ====
+    // ==== VERSIONED ROUTE DEFINITIONS (v1) ====
 
-    // Health endpoint (no auth required)
-    const healthResource = this.api.root.addResource('health');
+    // Create v1 root resource
+    const v1Resource = this.api.root.addResource('v1');
+
+    // Health endpoint (no auth required) - /v1/health
+    const healthResource = v1Resource.addResource('health');
     healthResource.addMethod('GET', 
       new apigateway.LambdaIntegration(props.lambdaFunctions.healthCheck, lambdaIntegrationOptions),
       {
@@ -205,10 +282,10 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
-    // Device management routes
-    const devicesResource = this.api.root.addResource('devices');
+    // Device management routes - /v1/devices
+    const devicesResource = v1Resource.addResource('devices');
     
-    // POST /devices/register
+    // POST /v1/devices/register
     const registerResource = devicesResource.addResource('register');
     registerResource.addMethod('POST',
       new apigateway.LambdaIntegration(props.lambdaFunctions.registerDevice, lambdaIntegrationOptions),
@@ -219,10 +296,10 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
-    // Device-specific routes
+    // Device-specific routes - /v1/devices/{deviceId}
     const deviceResource = devicesResource.addResource('{deviceId}');
     
-    // PUT /devices/{deviceId}/settings
+    // PUT /v1/devices/{deviceId}/settings
     const settingsResource = deviceResource.addResource('settings');
     settingsResource.addMethod('PUT',
       new apigateway.LambdaIntegration(props.lambdaFunctions.updateDeviceSettings, lambdaIntegrationOptions),
@@ -233,7 +310,7 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
-    // POST /devices/{deviceId}/reset
+    // POST /v1/devices/{deviceId}/reset
     const resetResource = deviceResource.addResource('reset');
     resetResource.addMethod('POST',
       new apigateway.LambdaIntegration(props.lambdaFunctions.resetDevice, lambdaIntegrationOptions),
@@ -244,7 +321,7 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
-    // POST /devices/{deviceId}/invite
+    // POST /v1/devices/{deviceId}/invite
     const inviteResource = deviceResource.addResource('invite');
     inviteResource.addMethod('POST',
       new apigateway.LambdaIntegration(props.lambdaFunctions.inviteUser, lambdaIntegrationOptions),
@@ -255,7 +332,7 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
-    // DELETE /devices/{deviceId}/users/{userId}
+    // DELETE /v1/devices/{deviceId}/users/{userId}
     const deviceUsersResource = deviceResource.addResource('users');
     const deviceUserResource = deviceUsersResource.addResource('{userId}');
     deviceUserResource.addMethod('DELETE',
@@ -267,10 +344,10 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
-    // User management routes
-    const usersResource = this.api.root.addResource('users');
+    // User management routes - /v1/users
+    const usersResource = v1Resource.addResource('users');
     
-    // GET /users/{userId}/devices
+    // GET /v1/users/{userId}/devices
     const userResource = usersResource.addResource('{userId}');
     const userDevicesResource = userResource.addResource('devices');
     userDevicesResource.addMethod('GET',
@@ -282,7 +359,7 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
-    // GET /users/{userId}/invitations
+    // GET /v1/users/{userId}/invitations
     const userInvitationsResource = userResource.addResource('invitations');
     userInvitationsResource.addMethod('GET',
       new apigateway.LambdaIntegration(props.lambdaFunctions.getUserInvitations, lambdaIntegrationOptions),
@@ -293,10 +370,10 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
-    // Invitation management routes
-    const invitationsResource = this.api.root.addResource('invitations');
+    // Invitation management routes - /v1/invitations
+    const invitationsResource = v1Resource.addResource('invitations');
     
-    // POST /invitations/{invitationId}/accept
+    // POST /v1/invitations/{invitationId}/accept
     const invitationResource = invitationsResource.addResource('{invitationId}');
     const acceptResource = invitationResource.addResource('accept');
     acceptResource.addMethod('POST',
@@ -308,7 +385,7 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
-    // POST /invitations/{invitationId}/decline
+    // POST /v1/invitations/{invitationId}/decline
     const declineResource = invitationResource.addResource('decline');
     declineResource.addMethod('POST',
       new apigateway.LambdaIntegration(props.lambdaFunctions.declineInvitation, lambdaIntegrationOptions),
@@ -368,11 +445,14 @@ export class ApiGatewayStack extends cdk.Stack {
       statusCode: '401',
       responseHeaders: {
         'Access-Control-Allow-Origin': "'*'",
-        'Access-Control-Allow-Headers': "'*'",
+        'Access-Control-Allow-Headers': "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent,X-Requested-With,X-Correlation-ID,X-Client-Version'",
+        'Access-Control-Expose-Headers': "'X-Request-ID,X-API-Version'",
+        'X-Request-ID': "'$context.requestId'",
+        'X-API-Version': "'1.0.0'",
       },
       templates: {
         'application/json': JSON.stringify({
-          error: 'Unauthorized',
+          error: 'unauthorized',
           message: 'Authentication required',
           requestId: '$context.requestId',
         }),
@@ -386,12 +466,36 @@ export class ApiGatewayStack extends cdk.Stack {
       statusCode: '403',
       responseHeaders: {
         'Access-Control-Allow-Origin': "'*'",
-        'Access-Control-Allow-Headers': "'*'",
+        'Access-Control-Allow-Headers': "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent,X-Requested-With,X-Correlation-ID,X-Client-Version'",
+        'Access-Control-Expose-Headers': "'X-Request-ID,X-API-Version'",
+        'X-Request-ID': "'$context.requestId'",
+        'X-API-Version': "'1.0.0'",
       },
       templates: {
         'application/json': JSON.stringify({
-          error: 'AccessDenied',
-          message: 'Insufficient permissions',
+          error: 'forbidden',
+          message: 'Insufficient permissions to access this resource',
+          requestId: '$context.requestId',
+        }),
+      },
+    });
+
+    // Bad request response
+    new apigateway.GatewayResponse(this, 'BadRequestResponse', {
+      restApi: this.api,
+      type: apigateway.ResponseType.BAD_REQUEST_BODY,
+      statusCode: '400',
+      responseHeaders: {
+        'Access-Control-Allow-Origin': "'*'",
+        'Access-Control-Allow-Headers': "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent,X-Requested-With,X-Correlation-ID,X-Client-Version'",
+        'Access-Control-Expose-Headers': "'X-Request-ID,X-API-Version'",
+        'X-Request-ID': "'$context.requestId'",
+        'X-API-Version': "'1.0.0'",
+      },
+      templates: {
+        'application/json': JSON.stringify({
+          error: 'validation_failed',
+          message: 'Request validation failed',
           requestId: '$context.requestId',
         }),
       },
@@ -401,17 +505,12 @@ export class ApiGatewayStack extends cdk.Stack {
     new apigateway.GatewayResponse(this, 'Default4XXResponse', {
       restApi: this.api,
       type: apigateway.ResponseType.DEFAULT_4XX,
-      statusCode: '400',
       responseHeaders: {
         'Access-Control-Allow-Origin': "'*'",
-        'Access-Control-Allow-Headers': "'*'",
-      },
-      templates: {
-        'application/json': JSON.stringify({
-          error: 'BadRequest',
-          message: 'Invalid request',
-          requestId: '$context.requestId',
-        }),
+        'Access-Control-Allow-Headers': "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent,X-Requested-With,X-Correlation-ID,X-Client-Version'",
+        'Access-Control-Expose-Headers': "'X-Request-ID,X-API-Version'",
+        'X-Request-ID': "'$context.requestId'",
+        'X-API-Version': "'1.0.0'",
       },
     });
 
@@ -419,17 +518,12 @@ export class ApiGatewayStack extends cdk.Stack {
     new apigateway.GatewayResponse(this, 'Default5XXResponse', {
       restApi: this.api,
       type: apigateway.ResponseType.DEFAULT_5XX,
-      statusCode: '500',
       responseHeaders: {
         'Access-Control-Allow-Origin': "'*'",
-        'Access-Control-Allow-Headers': "'*'",
-      },
-      templates: {
-        'application/json': JSON.stringify({
-          error: 'InternalServerError',
-          message: 'An internal error occurred',
-          requestId: '$context.requestId',
-        }),
+        'Access-Control-Allow-Headers': "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent,X-Requested-With,X-Correlation-ID,X-Client-Version'",
+        'Access-Control-Expose-Headers': "'X-Request-ID,X-API-Version'",
+        'X-Request-ID': "'$context.requestId'",
+        'X-API-Version': "'1.0.0'",
       },
     });
   }

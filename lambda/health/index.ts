@@ -1,17 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import ResponseHandler from '../shared/response-handler';
-
-interface HealthCheckResponse {
-  status: 'healthy' | 'unhealthy';
-  timestamp: string;
-  environment: string;
-  version: string;
-  region: string;
-  checks: {
-    api: boolean;
-    lambda: boolean;
-  };
-}
+import { HealthCheckResponse } from '../../lib/types';
 
 export const handler = async (
   event: APIGatewayProxyEvent,
@@ -32,6 +21,7 @@ export const handler = async (
       checks: {
         api: true, // API Gateway is working if we receive this request
         lambda: true, // Lambda is working if this function executes
+        dynamodb: true, // TODO: Add actual DynamoDB health check
       },
     };
 
@@ -42,7 +32,7 @@ export const handler = async (
   } catch (error) {
     console.error('Health check failed:', error);
     
-    const response = ResponseHandler.internalError(
+    const response = ResponseHandler.serviceUnavailable(
       'Health check failed',
       requestId
     );

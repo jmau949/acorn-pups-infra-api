@@ -1,26 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import ResponseHandler from '../shared/response-handler';
-
-interface Device {
-  deviceId: string;
-  deviceName: string;
-  deviceType: string;
-  status: 'online' | 'offline' | 'pending';
-  lastSeen: string;
-  registeredAt: string;
-  settings: {
-    buttonSensitivity: number;
-    notificationPreferences: {
-      pushEnabled: boolean;
-      emailEnabled: boolean;
-    };
-  };
-}
-
-interface GetUserDevicesResponse {
-  devices: Device[];
-  total: number;
-}
+import { UserDevicesResponse, Device } from '../../lib/types';
 
 export const handler = async (
   event: APIGatewayProxyEvent,
@@ -31,61 +11,75 @@ export const handler = async (
   try {
     ResponseHandler.logRequest(event, context);
 
-    const userId = event.pathParameters?.userId;
+    // Get userId from path parameters
+    const userId = ResponseHandler.getPathParameter(event, 'userId');
     if (!userId) {
-      return ResponseHandler.badRequest('Missing userId parameter', requestId);
+      return ResponseHandler.badRequest('userId path parameter is required', requestId);
     }
 
-    // TODO: Validate userId from JWT token when Cognito is integrated
-    // TODO: Query DynamoDB for user's devices
+    // TODO: Validate userId format (UUID)
+    // TODO: Verify user has permission to access these devices (from JWT token)
+    // TODO: Query DynamoDB to get user's devices
 
     // Mock response for now
-    const devices: Device[] = [
+    const mockDevices: Device[] = [
       {
-        deviceId: 'device-001',
-        deviceName: 'Buddy\'s Button',
-        deviceType: 'acorn-button-v1',
-        status: 'online',
-        lastSeen: new Date(Date.now() - 300000).toISOString(), // 5 minutes ago
-        registeredAt: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
+        deviceId: 'acorn-receiver-001',
+        deviceName: 'Living Room Receiver',
+        serialNumber: 'SN123456789',
+        isOnline: true,
+        lastSeen: new Date(Date.now() - 5 * 60 * 1000).toISOString(), // 5 minutes ago
+        registeredAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // 1 day ago
+        firmwareVersion: '1.2.3',
         settings: {
-          buttonSensitivity: 5,
-          notificationPreferences: {
-            pushEnabled: true,
-            emailEnabled: false,
-          },
+          soundEnabled: true,
+          soundVolume: 7,
+          ledBrightness: 5,
+          notificationCooldown: 30,
+          quietHoursEnabled: true,
+          quietHoursStart: '22:00',
+          quietHoursEnd: '07:00',
+        },
+        permissions: {
+          notifications: true,
+          settings: true,
         },
       },
       {
-        deviceId: 'device-002',
-        deviceName: 'Luna\'s Button',
-        deviceType: 'acorn-button-v1',
-        status: 'offline',
-        lastSeen: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
-        registeredAt: new Date(Date.now() - 172800000).toISOString(), // 2 days ago
+        deviceId: 'acorn-receiver-002',
+        deviceName: 'Kitchen Receiver',
+        serialNumber: 'SN987654321',
+        isOnline: false,
+        lastSeen: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
+        registeredAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), // 1 week ago
+        firmwareVersion: '1.1.8',
         settings: {
-          buttonSensitivity: 3,
-          notificationPreferences: {
-            pushEnabled: true,
-            emailEnabled: true,
-          },
+          soundEnabled: true,
+          soundVolume: 5,
+          ledBrightness: 3,
+          notificationCooldown: 60,
+          quietHoursEnabled: false,
+        },
+        permissions: {
+          notifications: true,
+          settings: false, // User has limited permissions for this device
         },
       },
     ];
 
-    const response: GetUserDevicesResponse = {
-      devices,
-      total: devices.length,
+    const userDevicesResponse: UserDevicesResponse = {
+      devices: mockDevices,
+      total: mockDevices.length,
     };
 
-    console.log(`Retrieved ${devices.length} devices for user: ${userId}`);
+    console.log(`Retrieved ${mockDevices.length} devices for user: ${userId}`);
 
-    const apiResponse = ResponseHandler.success(response, requestId);
-    ResponseHandler.logResponse(apiResponse, requestId);
+    const response = ResponseHandler.success(userDevicesResponse, requestId);
+    ResponseHandler.logResponse(response, requestId);
     
-    return apiResponse;
+    return response;
   } catch (error) {
-    console.error('Get user devices failed:', error);
+    console.error('Failed to get user devices:', error);
     
     const response = ResponseHandler.internalError(
       'Failed to retrieve user devices',
