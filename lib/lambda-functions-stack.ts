@@ -24,44 +24,226 @@ export class LambdaFunctionsStack extends cdk.Stack {
       LOG_LEVEL: props.logLevel,
     };
 
-    // Create common IAM role for Lambda functions (moved up)
-    const lambdaRole = new iam.Role(this, 'LambdaExecutionRole', {
-      roleName: `acorn-pups-${props.environment}-lambda-role`,
+    // **IoT Device Management Policy** - for register-device, reset-device
+    const iotDeviceManagementPolicy = new iam.PolicyDocument({
+      statements: [
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: [
+            // Certificate Management
+            'iot:CreateKeysAndCertificate',
+            'iot:DeleteCertificate',
+            'iot:UpdateCertificate',
+            'iot:DescribeCertificate',
+            'iot:ListCertificates',
+            // Thing Management
+            'iot:CreateThing',
+            'iot:DeleteThing',
+            'iot:DescribeThing',
+            'iot:ListThings',
+            'iot:UpdateThing',
+            // Policy and Principal Management
+            'iot:AttachPolicy',
+            'iot:DetachPolicy',
+            'iot:AttachThingPrincipal',
+            'iot:DetachThingPrincipal',
+            'iot:ListThingPrincipals',
+            'iot:ListPrincipalThings',
+            'iot:GetPolicy',
+            'iot:ListPolicies',
+            // IoT Core Information
+            'iot:DescribeEndpoint',
+            // Communication for reset commands
+            'iot:Publish',
+          ],
+          resources: ['*'], // IoT resources are region-scoped
+        }),
+      ],
+    });
+
+    // **IoT Communication Policy** - for update-device-settings and other MQTT communication
+    const iotCommunicationPolicy = new iam.PolicyDocument({
+      statements: [
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: [
+            'iot:Publish',
+            'iot:DescribeEndpoint',
+          ],
+          resources: [
+            `arn:aws:iot:${this.region}:${this.account}:topic/acorn-pups/*`,
+            `arn:aws:iot:${this.region}:${this.account}:*/endpoint/*`,
+          ],
+        }),
+      ],
+    });
+
+    // **Data Access Policy** - comprehensive DynamoDB access for all functions
+    const dataAccessPolicy = new iam.PolicyDocument({
+      statements: [
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: [
+            // Core DynamoDB operations
+            'dynamodb:GetItem',
+            'dynamodb:PutItem',
+            'dynamodb:UpdateItem',
+            'dynamodb:DeleteItem',
+            'dynamodb:Query',
+            'dynamodb:Scan',
+            'dynamodb:BatchGetItem',
+            'dynamodb:BatchWriteItem',
+            // Transaction operations
+            'dynamodb:TransactGetItems',
+            'dynamodb:TransactWriteItems',
+            // Conditional operations
+            'dynamodb:ConditionCheckItem',
+            // Table information
+            'dynamodb:DescribeTable',
+            'dynamodb:ListTables',
+          ],
+          resources: [
+            // All Acorn Pups tables and their indexes
+            `arn:aws:dynamodb:${this.region}:${this.account}:table/acorn-pups-${props.environment}-*`,
+            `arn:aws:dynamodb:${this.region}:${this.account}:table/acorn-pups-${props.environment}-*/index/*`,
+            // Legacy naming patterns (if any)
+            `arn:aws:dynamodb:${this.region}:${this.account}:table/AcornPups*`,
+            `arn:aws:dynamodb:${this.region}:${this.account}:table/AcornPups*/index/*`,
+          ],
+        }),
+      ],
+    });
+
+    // **Notification Policy** - for handle-button-press and invitation emails
+    const notificationPolicy = new iam.PolicyDocument({
+      statements: [
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: [
+            // SNS Push Notifications
+            'sns:Publish',
+            'sns:CreatePlatformEndpoint',
+            'sns:DeleteEndpoint',
+            'sns:GetEndpointAttributes',
+            'sns:SetEndpointAttributes',
+            'sns:ListEndpointsByPlatformApplication',
+            'sns:CreateTopic',
+            'sns:DeleteTopic',
+            'sns:Subscribe',
+            'sns:Unsubscribe',
+            'sns:ListSubscriptions',
+            'sns:ListTopics',
+            // SES Email (for invitations)
+            'ses:SendEmail',
+            'ses:SendRawEmail',
+            'ses:SendTemplatedEmail',
+            'ses:GetSendQuota',
+            'ses:GetSendStatistics',
+          ],
+          resources: [
+            // SNS topics and platform applications
+            `arn:aws:sns:${this.region}:${this.account}:acorn-pups-${props.environment}-*`,
+            // SES (region-specific for SES)
+            `arn:aws:ses:${this.region}:${this.account}:identity/*`,
+            // Allow all for SNS endpoints (they're created dynamically)
+            '*',
+          ],
+        }),
+      ],
+    });
+
+    // **Common Base Policy** - for all Lambda functions
+    const commonBasePolicy = new iam.PolicyDocument({
+      statements: [
+        // Parameter Store Access
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: [
+            'ssm:GetParameter',
+            'ssm:GetParameters',
+            'ssm:GetParametersByPath',
+            'ssm:PutParameter',
+            'ssm:DeleteParameter',
+          ],
+          resources: [
+            `arn:aws:ssm:${this.region}:${this.account}:parameter/acorn-pups/${props.environment}/*`,
+          ],
+        }),
+        // CloudWatch Logs
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: [
+            'logs:CreateLogGroup',
+            'logs:CreateLogStream',
+            'logs:PutLogEvents',
+            'logs:DescribeLogGroups',
+            'logs:DescribeLogStreams',
+          ],
+          resources: [
+            `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/lambda/acorn-pups-${props.environment}-*`,
+            `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/lambda/acorn-pups-${props.environment}-*:*`,
+          ],
+        }),
+      ],
+    });
+
+    // **Create specific IAM roles for different function groups**
+
+    // Base Lambda role for functions that only need basic access
+    const baseLambdaRole = new iam.Role(this, 'BaseLambdaRole', {
+      roleName: `acorn-pups-${props.environment}-base-lambda-role`,
       assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
       managedPolicies: [
         iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
       ],
       inlinePolicies: {
-        ParameterStoreAccess: new iam.PolicyDocument({
-          statements: [
-            new iam.PolicyStatement({
-              effect: iam.Effect.ALLOW,
-              actions: [
-                'ssm:GetParameter',
-                'ssm:GetParameters',
-                'ssm:GetParametersByPath',
-              ],
-              resources: [
-                `arn:aws:ssm:${this.region}:${this.account}:parameter/acorn-pups/${props.environment}/*`,
-              ],
-            }),
-          ],
-        }),
-        CloudWatchLogs: new iam.PolicyDocument({
-          statements: [
-            new iam.PolicyStatement({
-              effect: iam.Effect.ALLOW,
-              actions: [
-                'logs:CreateLogGroup',
-                'logs:CreateLogStream',
-                'logs:PutLogEvents',
-              ],
-              resources: ['*'],
-            }),
-          ],
-        }),
+        CommonBasePolicy: commonBasePolicy,
+        DataAccess: dataAccessPolicy,
       },
     });
+
+    // IoT Device Management role (register-device, reset-device)
+    const iotDeviceManagementRole = new iam.Role(this, 'IoTDeviceManagementRole', {
+      roleName: `acorn-pups-${props.environment}-iot-device-mgmt-role`,
+      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
+      ],
+      inlinePolicies: {
+        CommonBasePolicy: commonBasePolicy,
+        DataAccess: dataAccessPolicy,
+        IoTDeviceManagement: iotDeviceManagementPolicy,
+      },
+    });
+
+    // IoT Communication role (update-device-settings)
+    const iotCommunicationRole = new iam.Role(this, 'IoTCommunicationRole', {
+      roleName: `acorn-pups-${props.environment}-iot-comm-role`,
+      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
+      ],
+      inlinePolicies: {
+        CommonBasePolicy: commonBasePolicy,
+        DataAccess: dataAccessPolicy,
+        IoTCommunication: iotCommunicationPolicy,
+      },
+    });
+
+    // Notification role (handle-button-press, invite-user)
+    const notificationRole = new iam.Role(this, 'NotificationRole', {
+      roleName: `acorn-pups-${props.environment}-notification-role`,
+      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
+      ],
+      inlinePolicies: {
+        CommonBasePolicy: commonBasePolicy,
+        DataAccess: dataAccessPolicy,
+        Notifications: notificationPolicy,
+      },
+    });
+
     const createBundledCode = (functionPath: string) => {
       return lambda.Code.fromAsset('.', {
         bundling: {
@@ -94,7 +276,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       memorySize: 256,
       environment: commonEnvironment,
       logRetention: logs.RetentionDays.ONE_WEEK,
-      role: lambdaRole, // Now properly assigned
+      role: baseLambdaRole, // Now properly assigned
     };
 
     // Health Check Function (no auth required)
@@ -115,6 +297,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
         handler: 'index.handler',
         description: 'Register a new device for a user',
         timeout: cdk.Duration.seconds(60),
+        role: iotDeviceManagementRole,
       }),
 
       getUserDevices: new lambda.Function(this, 'GetUserDevicesFunction', {
@@ -123,6 +306,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
         code: createBundledCode('get-user-devices'),
         handler: 'index.handler',
         description: 'Get all devices for a specific user',
+        role: baseLambdaRole,
       }),
 
       updateDeviceSettings: new lambda.Function(this, 'UpdateDeviceSettingsFunction', {
@@ -131,6 +315,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
         code: createBundledCode('update-device-settings'),
         handler: 'index.handler',
         description: 'Update device configuration and settings',
+        role: iotCommunicationRole,
       }),
 
       updateDeviceStatus: new lambda.Function(this, 'UpdateDeviceStatusFunction', {
@@ -139,6 +324,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
         code: createBundledCode('update-device-status'),
         handler: 'index.handler',
         description: 'Process device status updates from ESP32 receivers and update DeviceStatus table',
+        role: baseLambdaRole,
       }),
 
       resetDevice: new lambda.Function(this, 'ResetDeviceFunction', {
@@ -147,6 +333,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
         code: createBundledCode('reset-device'),
         handler: 'index.handler',
         description: 'Factory reset device and clear all data',
+        role: iotDeviceManagementRole,
       }),
 
       // User Management Functions
@@ -156,6 +343,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
         code: createBundledCode('invite-user'),
         handler: 'index.handler',
         description: 'Invite a user to access a device',
+        role: notificationRole,
       }),
 
       removeUserAccess: new lambda.Function(this, 'RemoveUserAccessFunction', {
@@ -164,6 +352,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
         code: createBundledCode('remove-user'),
         handler: 'index.handler',
         description: 'Remove user access from a device',
+        role: baseLambdaRole,
       }),
 
       getUserInvitations: new lambda.Function(this, 'GetUserInvitationsFunction', {
@@ -172,6 +361,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
         code: createBundledCode('get-user-invitations'),
         handler: 'index.handler',
         description: 'Get pending invitations for a user',
+        role: baseLambdaRole,
       }),
 
       // Invitation Management Functions
@@ -181,6 +371,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
         code: createBundledCode('accept-invitation'),
         handler: 'index.handler',
         description: 'Accept device invitation',
+        role: baseLambdaRole,
       }),
 
       declineInvitation: new lambda.Function(this, 'DeclineInvitationFunction', {
@@ -189,6 +380,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
         code: createBundledCode('decline-invitation'),
         handler: 'index.handler',
         description: 'Decline device invitation',
+        role: baseLambdaRole,
       }),
 
       // IoT Event Processing Functions
@@ -199,6 +391,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
         handler: 'index.handler',
         description: 'Process button press events and trigger notifications',
         timeout: cdk.Duration.seconds(60),
+        role: notificationRole,
       }),
     };
 
@@ -226,12 +419,66 @@ export class LambdaFunctionsStack extends cdk.Stack {
       });
     });
 
-    // Create additional stack-level parameters
+    // Create additional stack-level parameters for all IAM roles
+    parameterHelper.createParameter(
+      'BaseLambdaRoleArn',
+      baseLambdaRole.roleArn,
+      'Base Lambda execution role ARN',
+      `/acorn-pups/${props.environment}/lambda-functions/base-role/arn`
+    );
+
+    parameterHelper.createParameter(
+      'IoTDeviceManagementRoleArn',
+      iotDeviceManagementRole.roleArn,
+      'IoT Device Management Lambda role ARN',
+      `/acorn-pups/${props.environment}/lambda-functions/iot-device-mgmt-role/arn`
+    );
+
+    parameterHelper.createParameter(
+      'IoTCommunicationRoleArn',
+      iotCommunicationRole.roleArn,
+      'IoT Communication Lambda role ARN',
+      `/acorn-pups/${props.environment}/lambda-functions/iot-comm-role/arn`
+    );
+
+    parameterHelper.createParameter(
+      'NotificationRoleArn',
+      notificationRole.roleArn,
+      'Notification Lambda role ARN',
+      `/acorn-pups/${props.environment}/lambda-functions/notification-role/arn`
+    );
+
+    // Legacy parameter for backward compatibility
     parameterHelper.createParameter(
       'LambdaRoleArn',
-      lambdaRole.roleArn,
-      'Lambda execution role ARN',
+      baseLambdaRole.roleArn,
+      'Lambda execution role ARN (legacy)',
       `/acorn-pups/${props.environment}/lambda-functions/execution-role/arn`
     );
+
+    // Create CloudFormation outputs for all roles
+    new cdk.CfnOutput(this, 'BaseLambdaRoleArn', {
+      value: baseLambdaRole.roleArn,
+      description: 'ARN of the base Lambda execution role',
+      exportName: `acorn-pups-${props.environment}-base-lambda-role-arn`,
+    });
+
+    new cdk.CfnOutput(this, 'IoTDeviceManagementRoleArn', {
+      value: iotDeviceManagementRole.roleArn,
+      description: 'ARN of the IoT Device Management Lambda role',
+      exportName: `acorn-pups-${props.environment}-iot-device-mgmt-role-arn`,
+    });
+
+    new cdk.CfnOutput(this, 'IoTCommunicationRoleArn', {
+      value: iotCommunicationRole.roleArn,
+      description: 'ARN of the IoT Communication Lambda role',
+      exportName: `acorn-pups-${props.environment}-iot-comm-role-arn`,
+    });
+
+    new cdk.CfnOutput(this, 'NotificationRoleArn', {
+      value: notificationRole.roleArn,
+      description: 'ARN of the Notification Lambda role',
+      exportName: `acorn-pups-${props.environment}-notification-role-arn`,
+    });
   }
 }
