@@ -62,8 +62,6 @@ export class LambdaFunctionsStack extends cdk.Stack {
         }),
       },
     });
-
-    // Function to create bundled code with shared dependencies
     const createBundledCode = (functionPath: string) => {
       return lambda.Code.fromAsset('.', {
         bundling: {
@@ -75,10 +73,13 @@ export class LambdaFunctionsStack extends cdk.Stack {
               'mkdir -p /asset-output/lambda/shared',
               // Copy all shared files
               'cp -r dist/lambda/shared/* /asset-output/lambda/shared/',
-              // Copy the function's handler to the root
-              `cp dist/lambda/${functionPath}/index.js /asset-output/index.js`,
+              // Copy the function's handler to a temp location
+              `cp dist/lambda/${functionPath}/index.js /tmp/original-index.js`,
+              // Rewrite import paths to match /lambda/shared/ structure
+              `sed 's|../shared/|./lambda/shared/|g' /tmp/original-index.js > /asset-output/index.js`,
+              // Copy the function's types (if available)
               `cp dist/lambda/${functionPath}/index.d.ts /asset-output/index.d.ts 2>/dev/null || true`,
-              // Verify the files were created
+              // Debug: verify files were created
               'ls -la /asset-output/',
               'ls -la /asset-output/lambda/shared/',
             ].join(' && ')
@@ -86,7 +87,6 @@ export class LambdaFunctionsStack extends cdk.Stack {
         },
       });
     };
-
     // Common Lambda function configuration
     const commonFunctionProps = {
       runtime: lambda.Runtime.NODEJS_22_X,
