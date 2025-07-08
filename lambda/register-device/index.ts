@@ -1,11 +1,26 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import ResponseHandler from '../shared/response-handler';
-import { 
-  DeviceRegistrationRequest, 
-  DeviceRegistrationResponse, 
-  ValidationError,
-  VALIDATION_CONSTRAINTS 
-} from '../../lib/types';
+
+interface DeviceRegistrationRequest {
+  deviceId: string;
+  deviceName: string;
+  serialNumber: string;
+  macAddress: string;
+}
+
+interface DeviceRegistrationResponse {
+  deviceId: string;
+  deviceName: string;
+  serialNumber: string;
+  ownerId: string;
+  registeredAt: string;
+  status: 'pending' | 'active';
+  certificates: {
+    deviceCertificate: string;
+    privateKey: string;
+    iotEndpoint: string;
+  };
+}
 
 export const handler = async (
   event: APIGatewayProxyEvent,
@@ -25,66 +40,33 @@ export const handler = async (
     const { deviceId, deviceName, serialNumber, macAddress } = body;
 
     // Validate required fields
-    const requiredFields = {
-      deviceId,
-      deviceName,
-      serialNumber,
-      macAddress,
-    };
-
-    const validationErrors: ValidationError[] = [];
-    
-    // Required field validation
-    validationErrors.push(...ResponseHandler.validateRequired(requiredFields, requestId));
-
-    // Field-specific validation
-    if (deviceId) {
-      validationErrors.push(...ResponseHandler.validateString(
-        deviceId,
-        'deviceId',
-        VALIDATION_CONSTRAINTS.DEVICE_ID.MIN_LENGTH,
-        VALIDATION_CONSTRAINTS.DEVICE_ID.MAX_LENGTH,
-        VALIDATION_CONSTRAINTS.DEVICE_ID.PATTERN
-      ));
-    }
-
-    if (deviceName) {
-      validationErrors.push(...ResponseHandler.validateString(
-        deviceName,
-        'deviceName',
-        VALIDATION_CONSTRAINTS.DEVICE_NAME.MIN_LENGTH,
-        VALIDATION_CONSTRAINTS.DEVICE_NAME.MAX_LENGTH,
-        VALIDATION_CONSTRAINTS.DEVICE_NAME.PATTERN
-      ));
-    }
-
-    if (serialNumber) {
-      validationErrors.push(...ResponseHandler.validateString(
-        serialNumber,
-        'serialNumber',
-        VALIDATION_CONSTRAINTS.SERIAL_NUMBER.MIN_LENGTH,
-        VALIDATION_CONSTRAINTS.SERIAL_NUMBER.MAX_LENGTH,
-        VALIDATION_CONSTRAINTS.SERIAL_NUMBER.PATTERN
-      ));
-    }
-
-    if (macAddress) {
-      validationErrors.push(...ResponseHandler.validateString(
-        macAddress,
-        'macAddress',
-        undefined,
-        undefined,
-        VALIDATION_CONSTRAINTS.MAC_ADDRESS.PATTERN
-      ));
-    }
-
-    // Return validation errors if any
-    if (validationErrors.length > 0) {
-      return ResponseHandler.validationError(
-        'Request validation failed',
-        requestId,
-        validationErrors
+    if (!deviceId || !deviceName || !serialNumber || !macAddress) {
+      return ResponseHandler.badRequest(
+        'Missing required fields: deviceId, deviceName, serialNumber, macAddress',
+        requestId
       );
+    }
+
+    // Basic validation patterns
+    const deviceIdPattern = /^[a-zA-Z0-9\-_]+$/;
+    const deviceNamePattern = /^[a-zA-Z0-9\s\-_.]+$/;
+    const serialNumberPattern = /^[A-Z0-9]+$/;
+    const macAddressPattern = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/;
+
+    if (!deviceIdPattern.test(deviceId)) {
+      return ResponseHandler.badRequest('deviceId format is invalid', requestId);
+    }
+
+    if (deviceName.length < 1 || deviceName.length > 50 || !deviceNamePattern.test(deviceName)) {
+      return ResponseHandler.badRequest('deviceName format is invalid', requestId);
+    }
+
+    if (serialNumber.length < 1 || serialNumber.length > 50 || !serialNumberPattern.test(serialNumber)) {
+      return ResponseHandler.badRequest('serialNumber format is invalid', requestId);
+    }
+
+    if (!macAddressPattern.test(macAddress)) {
+      return ResponseHandler.badRequest('macAddress format is invalid', requestId);
     }
 
     // TODO: Get userId from JWT token when Cognito is integrated

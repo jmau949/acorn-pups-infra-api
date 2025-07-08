@@ -1,136 +1,49 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
-import { ValidationError, ValidationErrorResponse, ErrorCode, ERROR_CODES } from '../../lib/types';
+import { ValidationError } from './types';
 
-export interface ApiResponse<T = any> {
-  statusCode: number;
-  headers: Record<string, string>;
-  body: string;
-}
+type HttpStatusCode = 200 | 201 | 204 | 400 | 401 | 403 | 404 | 409 | 422 | 500 | 503;
 
-export interface ApiErrorResponse {
+interface ApiErrorResponse {
   error: string;
   message: string;
   requestId: string;
+  validationErrors?: ValidationError[];
 }
 
-export interface ApiSuccessResponse<T = any> {
-  data: T;
+interface ApiSuccessResponse<T = any> {
+  data?: T;
   requestId: string;
 }
 
-export class ResponseHandler {
-  private static getDefaultHeaders(requestId: string): Record<string, string> {
-    return {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent,X-Requested-With,X-Correlation-ID,X-Client-Version',
-      'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-      'Access-Control-Expose-Headers': 'X-Request-ID,X-API-Version',
-      'X-Request-ID': requestId,
-      'X-API-Version': '1.0.0',
-    };
+class ResponseHandler {
+  private static readonly DEFAULT_HEADERS = {
+    'Content-Type': 'application/json',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'X-XSS-Protection': '1; mode=block',
+    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+  };
+
+  static getRequestId(event: APIGatewayProxyEvent): string {
+    return event.requestContext.requestId || 'unknown';
   }
 
-  static success<T>(data: T, requestId: string, statusCode: number = 200): ApiResponse<T> {
-    const response: ApiSuccessResponse<T> = {
-      data,
-      requestId,
-    };
-
-    return {
-      statusCode,
-      headers: this.getDefaultHeaders(requestId),
-      body: JSON.stringify(response),
-    };
+  static getUserId(event: APIGatewayProxyEvent): string | null {
+    // TODO: Extract from JWT token when Cognito integration is complete
+    return event.requestContext.authorizer?.claims?.sub || null;
   }
 
-  static error(
-    error: ErrorCode,
-    message: string,
-    requestId: string,
-    statusCode: number = 400
-  ): ApiResponse<ApiErrorResponse> {
-    const response: ApiErrorResponse = {
-      error,
-      message,
-      requestId,
-    };
-
-    return {
-      statusCode,
-      headers: this.getDefaultHeaders(requestId),
-      body: JSON.stringify(response),
-    };
-  }
-
-  static validationError(
-    message: string,
-    requestId: string,
-    validationErrors: ValidationError[]
-  ): ApiResponse<ValidationErrorResponse> {
-    const response: ValidationErrorResponse = {
-      error: ERROR_CODES.VALIDATION_FAILED,
-      message,
-      requestId,
-      validationErrors,
-    };
-
-    return {
-      statusCode: 400,
-      headers: this.getDefaultHeaders(requestId),
-      body: JSON.stringify(response),
-    };
-  }
-
-  static badRequest(message: string, requestId: string): ApiResponse<ApiErrorResponse> {
-    return this.error(ERROR_CODES.VALIDATION_FAILED, message, requestId, 400);
-  }
-
-  static unauthorized(message: string = 'Authentication required', requestId: string): ApiResponse<ApiErrorResponse> {
-    return this.error(ERROR_CODES.UNAUTHORIZED, message, requestId, 401);
-  }
-
-  static forbidden(message: string = 'Insufficient permissions to access this resource', requestId: string): ApiResponse<ApiErrorResponse> {
-    return this.error(ERROR_CODES.FORBIDDEN, message, requestId, 403);
-  }
-
-  static notFound(message: string = 'Resource not found', requestId: string): ApiResponse<ApiErrorResponse> {
-    return this.error(ERROR_CODES.RESOURCE_NOT_FOUND, message, requestId, 404);
-  }
-
-  static userNotFound(requestId: string): ApiResponse<ApiErrorResponse> {
-    return this.error(ERROR_CODES.USER_NOT_FOUND, 'User not found', requestId, 404);
-  }
-
-  static deviceNotFound(requestId: string): ApiResponse<ApiErrorResponse> {
-    return this.error(ERROR_CODES.DEVICE_NOT_FOUND, 'Device not found', requestId, 404);
-  }
-
-  static invitationNotFound(requestId: string): ApiResponse<ApiErrorResponse> {
-    return this.error(ERROR_CODES.INVITATION_NOT_FOUND, 'Invitation not found or has expired', requestId, 404);
-  }
-
-  static deviceAlreadyExists(requestId: string): ApiResponse<ApiErrorResponse> {
-    return this.error(ERROR_CODES.DEVICE_ALREADY_EXISTS, 'Device with this serial number already exists', requestId, 409);
-  }
-
-  static invitationAlreadyProcessed(requestId: string): ApiResponse<ApiErrorResponse> {
-    return this.error(ERROR_CODES.INVITATION_ALREADY_PROCESSED, 'This invitation has already been processed', requestId, 409);
-  }
-
-  static serviceUnavailable(message: string = 'API is temporarily unavailable', requestId: string): ApiResponse<ApiErrorResponse> {
-    return this.error(ERROR_CODES.SERVICE_UNAVAILABLE, message, requestId, 503);
-  }
-
-  static internalError(message: string = 'Internal server error', requestId: string): ApiResponse<ApiErrorResponse> {
-    return this.error(ERROR_CODES.INTERNAL_SERVER_ERROR, message, requestId, 500);
+  static getPathParameter(event: APIGatewayProxyEvent, paramName: string): string | null {
+    return event.pathParameters?.[paramName] || null;
   }
 
   static parseBody<T>(event: APIGatewayProxyEvent): T | null {
+    if (!event.body) return null;
+    
     try {
-      if (!event.body) {
-        return null;
-      }
       return JSON.parse(event.body) as T;
     } catch (error) {
       console.error('Failed to parse request body:', error);
@@ -138,151 +51,116 @@ export class ResponseHandler {
     }
   }
 
-  static getRequestId(event: APIGatewayProxyEvent): string {
-    return event.requestContext?.requestId || `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  }
-
-  static getUserId(event: APIGatewayProxyEvent): string | null {
-    // This will be populated when Cognito authorizer is added
-    return event.requestContext?.authorizer?.claims?.sub || null;
-  }
-
-  static getPathParameter(event: APIGatewayProxyEvent, paramName: string): string | null {
-    return event.pathParameters?.[paramName] || null;
-  }
-
-  static getQueryParameter(event: APIGatewayProxyEvent, paramName: string): string | null {
-    return event.queryStringParameters?.[paramName] || null;
-  }
-
-  static getHeader(event: APIGatewayProxyEvent, headerName: string): string | null {
-    return event.headers?.[headerName] || event.headers?.[headerName.toLowerCase()] || null;
-  }
-
-  static getCorrelationId(event: APIGatewayProxyEvent): string | null {
-    return this.getHeader(event, 'X-Correlation-ID');
-  }
-
-  static getClientVersion(event: APIGatewayProxyEvent): string | null {
-    return this.getHeader(event, 'X-Client-Version');
-  }
-
   static logRequest(event: APIGatewayProxyEvent, context: Context): void {
-    const requestId = this.getRequestId(event);
-    const userId = this.getUserId(event);
-    const correlationId = this.getCorrelationId(event);
-    const clientVersion = this.getClientVersion(event);
-    
-    console.log(JSON.stringify({
-      requestId,
-      correlationId,
-      userId,
-      clientVersion,
+    console.log('Request:', {
+      requestId: event.requestContext.requestId,
       httpMethod: event.httpMethod,
-      resourcePath: event.resource,
-      pathParameters: event.pathParameters,
+      path: event.path,
+      headers: event.headers,
       queryStringParameters: event.queryStringParameters,
-      userAgent: event.headers?.['User-Agent'] || event.headers?.['user-agent'],
-      sourceIp: event.requestContext?.identity?.sourceIp,
+      pathParameters: event.pathParameters,
       functionName: context.functionName,
-      functionVersion: context.functionVersion,
-      timestamp: new Date().toISOString(),
-    }));
+      remainingTimeInMillis: context.getRemainingTimeInMillis(),
+    });
   }
 
-  static logResponse(response: ApiResponse, requestId: string): void {
-    console.log(JSON.stringify({
+  static logResponse(response: APIGatewayProxyResult, requestId: string): void {
+    console.log('Response:', {
       requestId,
       statusCode: response.statusCode,
-      responseSize: response.body.length,
-      timestamp: new Date().toISOString(),
-    }));
-  }
-
-  static validateRequired(fields: Record<string, any>, requestId: string): ValidationError[] {
-    const errors: ValidationError[] = [];
-
-    Object.entries(fields).forEach(([field, value]) => {
-      if (value === undefined || value === null || value === '') {
-        errors.push({
-          field,
-          message: `${field} is required`,
-        });
-      }
+      headers: response.headers,
+      body: response.body,
     });
-
-    return errors;
   }
 
-  static validateString(
-    value: string,
-    field: string,
-    minLength?: number,
-    maxLength?: number,
-    pattern?: RegExp
-  ): ValidationError[] {
-    const errors: ValidationError[] = [];
-
-    if (minLength !== undefined && value.length < minLength) {
-      errors.push({
-        field,
-        message: `${field} must be at least ${minLength} characters`,
-      });
-    }
-
-    if (maxLength !== undefined && value.length > maxLength) {
-      errors.push({
-        field,
-        message: `${field} must be at most ${maxLength} characters`,
-      });
-    }
-
-    if (pattern && !pattern.test(value)) {
-      errors.push({
-        field,
-        message: `${field} format is invalid`,
-      });
-    }
-
-    return errors;
-  }
-
-  static validateNumber(
-    value: number,
-    field: string,
-    min?: number,
-    max?: number
-  ): ValidationError[] {
-    const errors: ValidationError[] = [];
-
-    if (min !== undefined && value < min) {
-      errors.push({
-        field,
-        message: `${field} must be at least ${min}`,
-      });
-    }
-
-    if (max !== undefined && value > max) {
-      errors.push({
-        field,
-        message: `${field} must be at most ${max}`,
-      });
-    }
-
-    return errors;
-  }
-
-  static validateEmail(value: string, field: string): ValidationError[] {
-    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return this.validateString(value, field, 5, 254, emailPattern);
-  }
-
-  static noContent(requestId: string): ApiResponse<never> {
-    return {
-      statusCode: 204,
-      headers: this.getDefaultHeaders(requestId),
-      body: '',
+  static createResponse<T>(
+    statusCode: HttpStatusCode,
+    data?: T,
+    error?: string,
+    message?: string,
+    requestId?: string,
+    validationErrors?: ValidationError[]
+  ): APIGatewayProxyResult {
+    const headers = {
+      ...ResponseHandler.DEFAULT_HEADERS,
+      'X-Request-ID': requestId || 'unknown',
+      'X-API-Version': '1.0',
+      'X-Correlation-ID': requestId || 'unknown',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Client-Version',
+      'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+      'Access-Control-Max-Age': '86400',
     };
+
+    let body: string;
+    
+    if (statusCode >= 400) {
+      const errorResponse: ApiErrorResponse = {
+        error: error || 'Unknown error',
+        message: message || 'An error occurred',
+        requestId: requestId || 'unknown',
+        ...(validationErrors && { validationErrors }),
+      };
+      body = JSON.stringify(errorResponse);
+    } else {
+      if (statusCode === 204) {
+        body = '';
+      } else {
+        const successResponse: ApiSuccessResponse<T> = {
+          ...(data !== undefined && { data }),
+          requestId: requestId || 'unknown',
+        };
+        body = JSON.stringify(successResponse);
+      }
+    }
+
+    return {
+      statusCode,
+      headers,
+      body,
+    };
+  }
+
+  // Success responses
+  static success<T>(data: T, requestId: string, statusCode: HttpStatusCode = 200): APIGatewayProxyResult {
+    return ResponseHandler.createResponse(statusCode, data, undefined, undefined, requestId);
+  }
+
+  static noContent(requestId: string): APIGatewayProxyResult {
+    return ResponseHandler.createResponse(204, undefined, undefined, undefined, requestId);
+  }
+
+  // Error responses
+  static badRequest(message: string, requestId: string, validationErrors?: ValidationError[]): APIGatewayProxyResult {
+    return ResponseHandler.createResponse(400, undefined, 'bad_request', message, requestId, validationErrors);
+  }
+
+  static unauthorized(message: string = 'Unauthorized', requestId: string): APIGatewayProxyResult {
+    return ResponseHandler.createResponse(401, undefined, 'unauthorized', message, requestId);
+  }
+
+  static forbidden(message: string = 'Forbidden', requestId: string): APIGatewayProxyResult {
+    return ResponseHandler.createResponse(403, undefined, 'forbidden', message, requestId);
+  }
+
+  static notFound(message: string = 'Resource not found', requestId: string): APIGatewayProxyResult {
+    return ResponseHandler.createResponse(404, undefined, 'not_found', message, requestId);
+  }
+
+  static conflict(message: string, requestId: string): APIGatewayProxyResult {
+    return ResponseHandler.createResponse(409, undefined, 'conflict', message, requestId);
+  }
+
+  static validationError(message: string, validationErrors: ValidationError[], requestId: string): APIGatewayProxyResult {
+    return ResponseHandler.createResponse(422, undefined, 'validation_failed', message, requestId, validationErrors);
+  }
+
+  static internalError(message: string = 'Internal server error', requestId: string): APIGatewayProxyResult {
+    return ResponseHandler.createResponse(500, undefined, 'internal_server_error', message, requestId);
+  }
+
+  static serviceUnavailable(message: string = 'Service unavailable', requestId: string): APIGatewayProxyResult {
+    return ResponseHandler.createResponse(503, undefined, 'service_unavailable', message, requestId);
   }
 }
 

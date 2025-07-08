@@ -1,6 +1,18 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import ResponseHandler from '../shared/response-handler';
-import { HealthCheckResponse } from '../../lib/types';
+
+interface HealthCheckResponse {
+  status: 'healthy' | 'unhealthy';
+  timestamp: string;
+  environment: string;
+  version: string;
+  region: string;
+  checks: {
+    api: boolean;
+    lambda: boolean;
+    dynamodb: boolean;
+  };
+}
 
 export const handler = async (
   event: APIGatewayProxyEvent,

@@ -71,16 +71,16 @@ export class LambdaFunctionsStack extends cdk.Stack {
           command: [
             'bash', '-c', [
               'set -e',
-              // Create only the shared directory structure
+              // Create the lambda/shared directory structure
               'mkdir -p /asset-output/lambda/shared',
-              // Copy only the shared files (no function duplicates)
+              // Copy all shared files
               'cp -r dist/lambda/shared/* /asset-output/lambda/shared/',
-              // Copy the function's handler to the root with corrected import
-              `cp dist/lambda/${functionPath}/index.js /tmp/original-index.js`,
-              // Use sed to fix the import path in the copied file
-              `sed 's|../shared/|./lambda/shared/|g' /tmp/original-index.js > /asset-output/index.js`,
-              // Copy other files from the function directory
-              `cp dist/lambda/${functionPath}/index.d.ts /asset-output/ 2>/dev/null || true`,
+              // Copy the function's handler to the root
+              `cp dist/lambda/${functionPath}/index.js /asset-output/index.js`,
+              `cp dist/lambda/${functionPath}/index.d.ts /asset-output/index.d.ts 2>/dev/null || true`,
+              // Verify the files were created
+              'ls -la /asset-output/',
+              'ls -la /asset-output/lambda/shared/',
             ].join(' && ')
           ],
         },

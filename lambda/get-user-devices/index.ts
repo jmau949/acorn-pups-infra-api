@@ -1,6 +1,37 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import ResponseHandler from '../shared/response-handler';
-import { UserDevicesResponse, Device } from '../../lib/types';
+
+interface DeviceSettings {
+  soundEnabled: boolean;
+  soundVolume: number;
+  ledBrightness: number;
+  notificationCooldown: number;
+  quietHoursEnabled: boolean;
+  quietHoursStart?: string;
+  quietHoursEnd?: string;
+}
+
+interface DevicePermissions {
+  notifications: boolean;
+  settings: boolean;
+}
+
+interface Device {
+  deviceId: string;
+  deviceName: string;
+  serialNumber: string;
+  isOnline: boolean;
+  lastSeen: string;
+  registeredAt: string;
+  firmwareVersion: string;
+  settings: DeviceSettings;
+  permissions: DevicePermissions;
+}
+
+interface UserDevicesResponse {
+  devices: Device[];
+  total: number;
+}
 
 export const handler = async (
   event: APIGatewayProxyEvent,

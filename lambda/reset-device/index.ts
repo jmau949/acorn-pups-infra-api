@@ -1,6 +1,11 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import ResponseHandler from '../shared/response-handler';
-import { DeviceResetResponse } from '../../lib/types';
+
+interface DeviceResetResponse {
+  deviceId: string;
+  message: string;
+  resetInitiatedAt: string;
+}
 
 export const handler = async (
   event: APIGatewayProxyEvent,
@@ -17,34 +22,29 @@ export const handler = async (
       return ResponseHandler.badRequest('deviceId path parameter is required', requestId);
     }
 
-    // TODO: Verify user has permission to reset this device (must be owner)
-    // TODO: Check if device exists (return 404 if not)
-    // TODO: Publish reset command to MQTT topic
-    // TODO: Update device status to "resetting" in DynamoDB
-    // TODO: Clean up IoT certificates and thing
-    // TODO: Remove all DeviceUsers entries
-    // TODO: Send notifications to affected users
+    // TODO: Validate user has permission to reset this device (from JWT token)
+    // TODO: Check if device exists in DynamoDB (return 404 if not)
+    // TODO: Publish reset command to MQTT topic for device
+    // TODO: Log reset action for audit trail
 
-    const resetInitiatedAt = new Date().toISOString();
-
-    // Mock response for now
+    // Mock reset response
     const resetResponse: DeviceResetResponse = {
       deviceId,
       message: 'Device reset initiated successfully',
-      resetInitiatedAt,
+      resetInitiatedAt: new Date().toISOString(),
     };
 
-    console.log(`Device reset initiated for device: ${deviceId} at ${resetInitiatedAt}`);
+    console.log(`Device reset initiated for device: ${deviceId}`);
 
     const response = ResponseHandler.success(resetResponse, requestId);
     ResponseHandler.logResponse(response, requestId);
     
     return response;
   } catch (error) {
-    console.error('Device reset failed:', error);
+    console.error('Failed to reset device:', error);
     
     const response = ResponseHandler.internalError(
-      'Failed to initiate device reset',
+      'Failed to reset device',
       requestId
     );
     ResponseHandler.logResponse(response, requestId);

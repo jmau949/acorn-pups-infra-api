@@ -1,11 +1,22 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import ResponseHandler from '../shared/response-handler';
-import { 
-  UserInviteRequest, 
-  UserInviteResponse, 
-  ValidationError,
-  VALIDATION_CONSTRAINTS 
-} from '../../lib/types';
+
+interface UserInviteRequest {
+  email: string;
+  notificationsPermission?: boolean;
+  settingsPermission?: boolean;
+}
+
+interface UserInviteResponse {
+  invitationId: string;
+  email: string;
+  deviceId: string;
+  deviceName: string;
+  notificationsPermission: boolean;
+  settingsPermission: boolean;
+  expiresAt: string;
+  sentAt: string;
+}
 
 export const handler = async (
   event: APIGatewayProxyEvent,
@@ -28,62 +39,59 @@ export const handler = async (
       return ResponseHandler.badRequest('Request body is required', requestId);
     }
 
-    const { email, notificationsPermission = true, settingsPermission = false } = body;
+    const { email, notificationsPermission, settingsPermission } = body;
 
-    // Validate required fields and format
-    const validationErrors: ValidationError[] = [];
-
-    // Email validation
+    // Validate required fields
     if (!email) {
-      validationErrors.push({
-        field: 'email',
-        message: 'email is required',
-      });
-    } else {
-      validationErrors.push(...ResponseHandler.validateEmail(email, 'email'));
+      return ResponseHandler.badRequest('email is required', requestId);
     }
 
-    // Return validation errors if any
-    if (validationErrors.length > 0) {
-      return ResponseHandler.validationError(
-        'Invalid invitation data',
-        requestId,
-        validationErrors
-      );
+    // Validate email format
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(email)) {
+      return ResponseHandler.badRequest('Invalid email format', requestId);
     }
 
-    // TODO: Verify user has permission to invite others to this device (must be owner/admin)
-    // TODO: Check if device exists (return 404 if not)
-    // TODO: Check if user is already invited or has access
-    // TODO: Create invitation record in DynamoDB
-    // TODO: Send email invitation with deep link
+    // Validate email length
+    if (email.length < 5 || email.length > 254) {
+      return ResponseHandler.badRequest('Email must be between 5 and 254 characters', requestId);
+    }
 
-    const sentAt = new Date().toISOString();
+    // TODO: Validate user has permission to invite users to this device (from JWT token)
+    // TODO: Check if device exists in DynamoDB (return 404 if not)
+    // TODO: Check if user is already invited or has access (return 409 if they do)
+    // TODO: Generate invitation token and store in DynamoDB
+    // TODO: Send invitation email via SES
+
+    // Mock device name (would come from DynamoDB)
+    const deviceName = `Device ${deviceId}`;
+
+    // Generate mock invitation
+    const invitationId = `inv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days from now
 
-    // Mock response for now
     const inviteResponse: UserInviteResponse = {
-      invitationId: `inv-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      invitationId,
       email,
       deviceId,
-      deviceName: 'Mock Device Name', // TODO: Get actual device name from DynamoDB
-      notificationsPermission,
-      settingsPermission,
+      deviceName,
+      notificationsPermission: notificationsPermission || false,
+      settingsPermission: settingsPermission || false,
       expiresAt,
-      sentAt,
+      sentAt: new Date().toISOString(),
     };
 
-    console.log(`Invitation sent to ${email} for device: ${deviceId}`);
+    console.log(`User invitation sent to ${email} for device: ${deviceId}`);
 
     const response = ResponseHandler.success(inviteResponse, requestId, 201);
     ResponseHandler.logResponse(response, requestId);
     
     return response;
   } catch (error) {
-    console.error('User invitation failed:', error);
+    console.error('Failed to invite user:', error);
     
     const response = ResponseHandler.internalError(
-      'Failed to send invitation',
+      'Failed to send user invitation',
       requestId
     );
     ResponseHandler.logResponse(response, requestId);

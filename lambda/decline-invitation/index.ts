@@ -1,6 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import ResponseHandler from '../shared/response-handler';
-import { InvitationActionResponse } from '../../lib/types';
+import { InvitationActionResponse } from '../shared/types';
 
 export const handler = async (
   event: APIGatewayProxyEvent,
@@ -17,33 +17,32 @@ export const handler = async (
       return ResponseHandler.badRequest('invitationId path parameter is required', requestId);
     }
 
-    // TODO: Verify invitation exists and is valid (not expired)
-    // TODO: Get invitation details from DynamoDB
-    // TODO: Verify requesting user matches invitation email
-    // TODO: Check if invitation already processed (return 409 if so)
-    // TODO: Mark invitation as declined in DynamoDB
-    // TODO: Send notification to device owner
+    // TODO: Validate invitation exists and is not expired
+    // TODO: Validate user has permission to decline this invitation (from JWT token)
+    // TODO: Delete invitation from DynamoDB
+    // TODO: Send notification to device owner (optional)
 
-    const processedAt = new Date().toISOString();
+    // Mock invitation data (would come from DynamoDB)
+    const mockDeviceId = 'acorn-receiver-001';
+    const mockDeviceName = 'Living Room Receiver';
 
-    // Mock response for now
     const actionResponse: InvitationActionResponse = {
       invitationId,
       action: 'declined',
       message: 'Invitation declined successfully',
-      processedAt,
-      deviceId: 'acorn-receiver-001', // TODO: Get from actual invitation
-      deviceName: 'Living Room Receiver', // TODO: Get from actual invitation
+      processedAt: new Date().toISOString(),
+      deviceId: mockDeviceId,
+      deviceName: mockDeviceName,
     };
 
-    console.log(`Invitation ${invitationId} declined at ${processedAt}`);
+    console.log(`Invitation ${invitationId} declined successfully`);
 
     const response = ResponseHandler.success(actionResponse, requestId);
     ResponseHandler.logResponse(response, requestId);
     
     return response;
   } catch (error) {
-    console.error('Decline invitation failed:', error);
+    console.error('Failed to decline invitation:', error);
     
     const response = ResponseHandler.internalError(
       'Failed to decline invitation',
