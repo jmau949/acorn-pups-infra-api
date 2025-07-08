@@ -24,6 +24,10 @@ info:
     - Push notifications sent to all authorized users
     - No persistent storage of button press events (MVP)
     
+    ## Request Tracing
+    All requests include a unique `requestId` in responses for observability.
+    Optional correlation headers can be provided for request tracking.
+    
   version: 1.0.0
   contact:
     name: Acorn Pups Team
@@ -33,9 +37,9 @@ info:
     url: https://opensource.org/licenses/MIT
 
 servers:
-  - url: https://api-dev.acornpups.com
+  - url: https://api-dev.acornpups.com/v1
     description: Development server
-  - url: https://api.acornpups.com
+  - url: https://api.acornpups.com/v1
     description: Production server
 
 security:
@@ -49,19 +53,48 @@ paths:
       tags:
         - System
       security: [] # No authentication required
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/ClientVersion'
       responses:
         '200':
           description: API is healthy
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+            X-API-Version:
+              $ref: '#/components/headers/X-API-Version'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
+              example:
+                data:
+                  status: "healthy"
+                  timestamp: "2024-01-15T10:30:00Z"
+                  environment: "production"
+                  version: "1.0.0"
+                  region: "us-west-2"
+                  checks:
+                    api: true
+                    lambda: true
+                    dynamodb: true
+                requestId: "req-123e4567-e89b-12d3-a456-426614174000"
         '500':
           description: API is unhealthy
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+            X-API-Version:
+              $ref: '#/components/headers/X-API-Version'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "service_unavailable"
+                message: "API is temporarily unavailable"
+                requestId: "req-123e4567-e89b-12d3-a456-426614174000"
 
   /devices/register:
     post:
@@ -69,33 +102,82 @@ paths:
       description: Register a new ESP32 receiver device for the authenticated user
       tags:
         - Device Management
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/ClientVersion'
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/DeviceRegistrationRequest'
+            example:
+              deviceId: "acorn-receiver-001"
+              deviceName: "Living Room Receiver"
+              serialNumber: "SN123456789"
+              macAddress: "AA:BB:CC:DD:EE:FF"
       responses:
         '201':
           description: Device registered successfully
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+            X-API-Version:
+              $ref: '#/components/headers/X-API-Version'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeviceRegistrationResponse'
+              example:
+                data:
+                  deviceId: "acorn-receiver-001"
+                  deviceName: "Living Room Receiver"
+                  serialNumber: "SN123456789"
+                  ownerId: "user-123e4567-e89b-12d3-a456-426614174000"
+                  registeredAt: "2024-01-15T10:30:00Z"
+                  status: "active"
+                  certificates:
+                    deviceCertificate: "-----BEGIN CERTIFICATE-----\nMIIBIjANBgkqhkiG9w0BAQEFA..."
+                    privateKey: "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC..."
+                    iotEndpoint: "a1b2c3d4e5f6g7-ats.iot.us-west-2.amazonaws.com"
+                requestId: "req-123e4567-e89b-12d3-a456-426614174000"
         '400':
-          description: Invalid request
+          description: Invalid request data
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+            X-API-Version:
+              $ref: '#/components/headers/X-API-Version'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ValidationErrorResponse'
+              example:
+                error: "validation_failed"
+                message: "Request validation failed"
+                requestId: "req-123e4567-e89b-12d3-a456-426614174000"
+                validationErrors:
+                  - field: "deviceName"
+                    message: "Device name must be between 1 and 50 characters"
+                  - field: "macAddress"
+                    message: "Invalid MAC address format"
         '401':
           $ref: '#/components/responses/Unauthorized'
         '409':
           description: Device already exists
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+            X-API-Version:
+              $ref: '#/components/headers/X-API-Version'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "device_already_exists"
+                message: "Device with this serial number already exists"
+                requestId: "req-123e4567-e89b-12d3-a456-426614174000"
 
   /users/{userId}/devices:
     get:
@@ -109,24 +191,52 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
+            example: "user-123e4567-e89b-12d3-a456-426614174000"
           description: User ID
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/ClientVersion'
       responses:
         '200':
           description: List of user's devices
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+            X-API-Version:
+              $ref: '#/components/headers/X-API-Version'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserDevicesResponse'
+              example:
+                data:
+                  devices:
+                    - deviceId: "acorn-receiver-001"
+                      deviceName: "Living Room Receiver"
+                      serialNumber: "SN123456789"
+                      isOnline: true
+                      lastSeen: "2024-01-15T10:25:00Z"
+                      registeredAt: "2024-01-15T10:30:00Z"
+                      firmwareVersion: "1.2.3"
+                      settings:
+                        soundEnabled: true
+                        soundVolume: 7
+                        ledBrightness: 5
+                        notificationCooldown: 30
+                        quietHoursEnabled: true
+                        quietHoursStart: "22:00"
+                        quietHoursEnd: "07:00"
+                      permissions:
+                        notifications: true
+                        settings: true
+                  total: 1
+                requestId: "req-123e4567-e89b-12d3-a456-426614174000"
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: User not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/UserNotFound'
 
   /devices/{deviceId}/settings:
     put:
@@ -140,36 +250,71 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
+            example: "acorn-receiver-001"
           description: Device ID
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/ClientVersion'
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/DeviceSettingsRequest'
+            example:
+              soundEnabled: true
+              soundVolume: 8
+              ledBrightness: 6
+              notificationCooldown: 30
+              quietHoursEnabled: true
+              quietHoursStart: "22:00"
+              quietHoursEnd: "07:00"
       responses:
         '200':
           description: Settings updated successfully
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+            X-API-Version:
+              $ref: '#/components/headers/X-API-Version'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeviceSettingsResponse'
+              example:
+                data:
+                  soundEnabled: true
+                  soundVolume: 8
+                  ledBrightness: 6
+                  notificationCooldown: 30
+                  quietHoursEnabled: true
+                  quietHoursStart: "22:00"
+                  quietHoursEnd: "07:00"
+                requestId: "req-123e4567-e89b-12d3-a456-426614174000"
         '400':
-          description: Invalid settings
+          description: Invalid settings data
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+            X-API-Version:
+              $ref: '#/components/headers/X-API-Version'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ValidationErrorResponse'
+              example:
+                error: "validation_failed"
+                message: "Invalid settings provided"
+                requestId: "req-123e4567-e89b-12d3-a456-426614174000"
+                validationErrors:
+                  - field: "soundVolume"
+                    message: "Volume must be between 1 and 10"
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: Device not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/DeviceNotFound'
 
   /devices/{deviceId}/reset:
     post:
@@ -183,24 +328,35 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
+            example: "acorn-receiver-001"
           description: Device ID
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/ClientVersion'
       responses:
         '200':
           description: Device reset initiated successfully
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+            X-API-Version:
+              $ref: '#/components/headers/X-API-Version'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeviceResetResponse'
+              example:
+                data:
+                  deviceId: "acorn-receiver-001"
+                  message: "Device reset initiated successfully"
+                  resetInitiatedAt: "2024-01-15T10:30:00Z"
+                requestId: "req-123e4567-e89b-12d3-a456-426614174000"
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: Device not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/DeviceNotFound'
 
   /devices/{deviceId}/invite:
     post:
@@ -214,36 +370,68 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
+            example: "acorn-receiver-001"
           description: Device ID
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/ClientVersion'
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/UserInviteRequest'
+            example:
+              email: "friend@example.com"
+              notificationsPermission: true
+              settingsPermission: false
       responses:
         '201':
           description: Invitation sent successfully
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+            X-API-Version:
+              $ref: '#/components/headers/X-API-Version'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserInviteResponse'
+              example:
+                data:
+                  invitationId: "inv-123e4567-e89b-12d3-a456-426614174000"
+                  email: "friend@example.com"
+                  deviceId: "acorn-receiver-001"
+                  deviceName: "Living Room Receiver"
+                  notificationsPermission: true
+                  settingsPermission: false
+                  expiresAt: "2024-01-22T10:30:00Z"
+                  sentAt: "2024-01-15T10:30:00Z"
+                requestId: "req-123e4567-e89b-12d3-a456-426614174000"
         '400':
           description: Invalid invitation request
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+            X-API-Version:
+              $ref: '#/components/headers/X-API-Version'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ValidationErrorResponse'
+              example:
+                error: "validation_failed"
+                message: "Invalid invitation data"
+                requestId: "req-123e4567-e89b-12d3-a456-426614174000"
+                validationErrors:
+                  - field: "email"
+                    message: "Invalid email format"
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: Device not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/DeviceNotFound'
 
   /devices/{deviceId}/users/{userId}:
     delete:
@@ -257,26 +445,33 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
+            example: "acorn-receiver-001"
           description: Device ID
         - name: userId
           in: path
           required: true
           schema:
             type: string
+            format: uuid
+            example: "user-123e4567-e89b-12d3-a456-426614174000"
           description: User ID to remove
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/ClientVersion'
       responses:
         '204':
           description: User access removed successfully
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+            X-API-Version:
+              $ref: '#/components/headers/X-API-Version'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: Device or user not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/DeviceOrUserNotFound'
 
   /users/{userId}/invitations:
     get:
@@ -290,24 +485,42 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
+            example: "user-123e4567-e89b-12d3-a456-426614174000"
           description: User ID
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/ClientVersion'
       responses:
         '200':
           description: List of user's pending invitations
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+            X-API-Version:
+              $ref: '#/components/headers/X-API-Version'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserInvitationsResponse'
+              example:
+                data:
+                  invitations:
+                    - invitationId: "inv-123e4567-e89b-12d3-a456-426614174000"
+                      deviceId: "acorn-receiver-001"
+                      deviceName: "Living Room Receiver"
+                      invitedBy: "owner@example.com"
+                      notificationsPermission: true
+                      settingsPermission: false
+                      createdAt: "2024-01-15T10:30:00Z"
+                      expiresAt: "2024-01-22T10:30:00Z"
+                  total: 1
+                requestId: "req-123e4567-e89b-12d3-a456-426614174000"
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: User not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/UserNotFound'
 
   /invitations/{invitationId}/accept:
     post:
@@ -321,28 +534,51 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
+            example: "inv-123e4567-e89b-12d3-a456-426614174000"
           description: Invitation ID
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/ClientVersion'
       responses:
         '200':
           description: Invitation accepted successfully
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+            X-API-Version:
+              $ref: '#/components/headers/X-API-Version'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/InvitationActionResponse'
+              example:
+                data:
+                  invitationId: "inv-123e4567-e89b-12d3-a456-426614174000"
+                  action: "accepted"
+                  message: "Invitation accepted successfully"
+                  processedAt: "2024-01-15T10:30:00Z"
+                  deviceId: "acorn-receiver-001"
+                  deviceName: "Living Room Receiver"
+                requestId: "req-123e4567-e89b-12d3-a456-426614174000"
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
-          description: Invitation not found or expired
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/InvitationNotFound'
         '409':
           description: Invitation already processed
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+            X-API-Version:
+              $ref: '#/components/headers/X-API-Version'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "invitation_already_processed"
+                message: "This invitation has already been processed"
+                requestId: "req-123e4567-e89b-12d3-a456-426614174000"
 
   /invitations/{invitationId}/decline:
     post:
@@ -356,28 +592,51 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
+            example: "inv-123e4567-e89b-12d3-a456-426614174000"
           description: Invitation ID
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/ClientVersion'
       responses:
         '200':
           description: Invitation declined successfully
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+            X-API-Version:
+              $ref: '#/components/headers/X-API-Version'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/InvitationActionResponse'
+              example:
+                data:
+                  invitationId: "inv-123e4567-e89b-12d3-a456-426614174000"
+                  action: "declined"
+                  message: "Invitation declined successfully"
+                  processedAt: "2024-01-15T10:30:00Z"
+                  deviceId: "acorn-receiver-001"
+                  deviceName: "Living Room Receiver"
+                requestId: "req-123e4567-e89b-12d3-a456-426614174000"
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
-          description: Invitation not found or expired
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/InvitationNotFound'
         '409':
           description: Invitation already processed
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+            X-API-Version:
+              $ref: '#/components/headers/X-API-Version'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "invitation_already_processed"
+                message: "This invitation has already been processed"
+                requestId: "req-123e4567-e89b-12d3-a456-426614174000"
 
 components:
   securitySchemes:
@@ -387,28 +646,134 @@ components:
       bearerFormat: JWT
       description: AWS Cognito JWT token
 
+  parameters:
+    CorrelationId:
+      name: X-Correlation-ID
+      in: header
+      schema:
+        type: string
+        format: uuid
+        example: "corr-123e4567-e89b-12d3-a456-426614174000"
+      description: Optional correlation ID for request tracking across services
+      
+    ClientVersion:
+      name: X-Client-Version
+      in: header
+      schema:
+        type: string
+        pattern: '^\d+\.\d+\.\d+$'
+        example: "1.2.3"
+      description: Mobile app version for compatibility tracking
+
+  headers:
+    X-Request-ID:
+      description: Request identifier for traceability
+      schema:
+        type: string
+        format: uuid
+        example: "req-123e4567-e89b-12d3-a456-426614174000"
+    X-API-Version:
+      description: API version used for this request
+      schema:
+        type: string
+        example: "1.0.0"
+
   responses:
     Unauthorized:
       description: Authentication required
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/X-Request-ID'
+        X-API-Version:
+          $ref: '#/components/headers/X-API-Version'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
           example:
-            error: "Unauthorized"
+            error: "unauthorized"
             message: "Authentication required"
-            requestId: "abc-123-def"
+            requestId: "req-123e4567-e89b-12d3-a456-426614174000"
     
     Forbidden:
       description: Insufficient permissions
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/X-Request-ID'
+        X-API-Version:
+          $ref: '#/components/headers/X-API-Version'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
           example:
-            error: "Forbidden"
-            message: "Insufficient permissions"
-            requestId: "abc-123-def"
+            error: "forbidden"
+            message: "Insufficient permissions to access this resource"
+            requestId: "req-123e4567-e89b-12d3-a456-426614174000"
+
+    UserNotFound:
+      description: User not found
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/X-Request-ID'
+        X-API-Version:
+          $ref: '#/components/headers/X-API-Version'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "user_not_found"
+            message: "User not found"
+            requestId: "req-123e4567-e89b-12d3-a456-426614174000"
+
+    DeviceNotFound:
+      description: Device not found
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/X-Request-ID'
+        X-API-Version:
+          $ref: '#/components/headers/X-API-Version'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "device_not_found"
+            message: "Device not found"
+            requestId: "req-123e4567-e89b-12d3-a456-426614174000"
+
+    DeviceOrUserNotFound:
+      description: Device or user not found
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/X-Request-ID'
+        X-API-Version:
+          $ref: '#/components/headers/X-API-Version'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "resource_not_found"
+            message: "Device or user not found"
+            requestId: "req-123e4567-e89b-12d3-a456-426614174000"
+
+    InvitationNotFound:
+      description: Invitation not found or expired
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/X-Request-ID'
+        X-API-Version:
+          $ref: '#/components/headers/X-API-Version'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "invitation_not_found"
+            message: "Invitation not found or has expired"
+            requestId: "req-123e4567-e89b-12d3-a456-426614174000"
 
   schemas:
     SuccessResponse:
@@ -419,7 +784,9 @@ components:
           description: Response data
         requestId:
           type: string
+          format: uuid
           description: Unique request identifier
+          example: "req-123e4567-e89b-12d3-a456-426614174000"
       required:
         - data
         - requestId
@@ -430,16 +797,43 @@ components:
         error:
           type: string
           description: Error code
+          example: "validation_failed"
         message:
           type: string
           description: Human-readable error message
+          example: "Request validation failed"
         requestId:
           type: string
+          format: uuid
           description: Unique request identifier
+          example: "req-123e4567-e89b-12d3-a456-426614174000"
       required:
         - error
         - message
         - requestId
+
+    ValidationErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            validationErrors:
+              type: array
+              description: Array of validation errors
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                    description: Field name that failed validation
+                    example: "deviceName"
+                  message:
+                    type: string
+                    description: Validation error message
+                    example: "Device name must be between 1 and 50 characters"
+                required:
+                  - field
+                  - message
 
     HealthResponse:
       allOf:
@@ -452,40 +846,67 @@ components:
                 status:
                   type: string
                   enum: [healthy, unhealthy]
+                  example: "healthy"
                 timestamp:
                   type: string
                   format: date-time
+                  example: "2024-01-15T10:30:00Z"
                 environment:
                   type: string
+                  example: "production"
                 version:
                   type: string
+                  example: "1.0.0"
                 region:
                   type: string
+                  example: "us-west-2"
                 checks:
                   type: object
                   properties:
                     api:
                       type: boolean
+                      example: true
                     lambda:
                       type: boolean
+                      example: true
+                    dynamodb:
+                      type: boolean
+                      example: true
+              required:
+                - status
+                - timestamp
+                - environment
+                - version
+                - region
+                - checks
 
     DeviceRegistrationRequest:
       type: object
       properties:
         deviceId:
           type: string
+          minLength: 1
+          maxLength: 100
+          pattern: '^[a-zA-Z0-9\-_]+$'
           description: Unique device identifier for ESP32 receiver
           example: "acorn-receiver-001"
         deviceName:
           type: string
+          minLength: 1
+          maxLength: 50
+          pattern: '^[a-zA-Z0-9\s\-_.]+$'
           description: Human-readable device name
           example: "Living Room Receiver"
         serialNumber:
           type: string
+          minLength: 1
+          maxLength: 50
+          pattern: '^[A-Z0-9]+$'
           description: Hardware serial number
           example: "SN123456789"
         macAddress:
           type: string
+          pattern: '^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$'
           description: Device MAC address
           example: "AA:BB:CC:DD:EE:FF"
       required:
@@ -504,50 +925,79 @@ components:
               properties:
                 deviceId:
                   type: string
+                  example: "acorn-receiver-001"
                 deviceName:
                   type: string
+                  example: "Living Room Receiver"
                 serialNumber:
                   type: string
+                  example: "SN123456789"
                 ownerId:
                   type: string
+                  format: uuid
+                  example: "user-123e4567-e89b-12d3-a456-426614174000"
                 registeredAt:
                   type: string
                   format: date-time
+                  example: "2024-01-15T10:30:00Z"
                 status:
                   type: string
                   enum: [pending, active]
+                  example: "active"
                 certificates:
                   type: object
                   properties:
                     deviceCertificate:
                       type: string
                       description: AWS IoT Core device certificate (PEM format)
+                      example: "-----BEGIN CERTIFICATE-----\nMIIBIjANBgkqhkiG9w0BAQEFA..."
                     privateKey:
                       type: string
                       description: Device private key (PEM format)
+                      example: "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC..."
                     iotEndpoint:
                       type: string
                       description: AWS IoT Core endpoint URL
+                      example: "a1b2c3d4e5f6g7-ats.iot.us-west-2.amazonaws.com"
+                  required:
+                    - deviceCertificate
+                    - privateKey
+                    - iotEndpoint
+              required:
+                - deviceId
+                - deviceName
+                - serialNumber
+                - ownerId
+                - registeredAt
+                - status
+                - certificates
 
     Device:
       type: object
       properties:
         deviceId:
           type: string
+          example: "acorn-receiver-001"
         deviceName:
           type: string
+          example: "Living Room Receiver"
         serialNumber:
           type: string
+          example: "SN123456789"
         isOnline:
           type: boolean
+          example: true
         lastSeen:
           type: string
           format: date-time
+          example: "2024-01-15T10:25:00Z"
         registeredAt:
           type: string
           format: date-time
+          example: "2024-01-15T10:30:00Z"
         firmwareVersion:
           type: string
+          example: "1.2.3"
         settings:
           $ref: '#/components/schemas/DeviceSettings'
         permissions:
@@ -555,8 +1005,23 @@ components:
           properties:
             notifications:
               type: boolean
+              example: true
             settings:
               type: boolean
+              example: true
+          required:
+            - notifications
+            - settings
+      required:
+        - deviceId
+        - deviceName
+        - serialNumber
+        - isOnline
+        - lastSeen
+        - registeredAt
+        - firmwareVersion
+        - settings
+        - permissions
 
     DeviceSettings:
       type: object
@@ -564,33 +1029,45 @@ components:
         soundEnabled:
           type: boolean
           description: Whether device makes sounds
+          example: true
         soundVolume:
           type: integer
           minimum: 1
           maximum: 10
           description: Device sound volume (1-10 scale)
+          example: 7
         ledBrightness:
           type: integer
           minimum: 1
           maximum: 10
           description: LED brightness level (1-10 scale)
+          example: 5
         notificationCooldown:
           type: integer
           minimum: 0
+          maximum: 300
           description: Seconds between notifications
+          example: 30
         quietHoursEnabled:
           type: boolean
           description: Whether quiet hours are active
+          example: true
         quietHoursStart:
           type: string
           pattern: '^([01]?[0-9]|2[0-3]):[0-5][0-9]$'
           example: "22:00"
-          description: Time to stop ringing locally
+          description: Time to stop ringing locally (24-hour format)
         quietHoursEnd:
           type: string
           pattern: '^([01]?[0-9]|2[0-3]):[0-5][0-9]$'
           example: "07:00"
-          description: Time to resume ringing locally
+          description: Time to resume ringing locally (24-hour format)
+      required:
+        - soundEnabled
+        - soundVolume
+        - ledBrightness
+        - notificationCooldown
+        - quietHoursEnabled
 
     UserDevicesResponse:
       allOf:
@@ -606,31 +1083,43 @@ components:
                     $ref: '#/components/schemas/Device'
                 total:
                   type: integer
+                  example: 1
+              required:
+                - devices
+                - total
 
     DeviceSettingsRequest:
       type: object
       properties:
         soundEnabled:
           type: boolean
+          example: true
         soundVolume:
           type: integer
           minimum: 1
           maximum: 10
+          example: 7
         ledBrightness:
           type: integer
           minimum: 1
           maximum: 10
+          example: 5
         notificationCooldown:
           type: integer
           minimum: 0
+          maximum: 300
+          example: 30
         quietHoursEnabled:
           type: boolean
+          example: true
         quietHoursStart:
           type: string
           pattern: '^([01]?[0-9]|2[0-3]):[0-5][0-9]$'
+          example: "22:00"
         quietHoursEnd:
           type: string
           pattern: '^([01]?[0-9]|2[0-3]):[0-5][0-9]$'
+          example: "07:00"
 
     DeviceSettingsResponse:
       allOf:
@@ -650,12 +1139,18 @@ components:
               properties:
                 deviceId:
                   type: string
+                  example: "acorn-receiver-001"
                 message:
                   type: string
                   example: "Device reset initiated successfully"
                 resetInitiatedAt:
                   type: string
                   format: date-time
+                  example: "2024-01-15T10:30:00Z"
+              required:
+                - deviceId
+                - message
+                - resetInitiatedAt
 
     UserInviteRequest:
       type: object
@@ -663,15 +1158,20 @@ components:
         email:
           type: string
           format: email
+          minLength: 5
+          maxLength: 254
           description: Email address of user to invite
+          example: "friend@example.com"
         notificationsPermission:
           type: boolean
           description: Can receive notifications from this device
           default: true
+          example: true
         settingsPermission:
           type: boolean
           description: Can modify device settings
           default: false
+          example: false
       required:
         - email
 
@@ -685,45 +1185,82 @@ components:
               properties:
                 invitationId:
                   type: string
+                  format: uuid
+                  example: "inv-123e4567-e89b-12d3-a456-426614174000"
                 email:
                   type: string
+                  format: email
+                  example: "friend@example.com"
                 deviceId:
                   type: string
+                  example: "acorn-receiver-001"
                 deviceName:
                   type: string
+                  example: "Living Room Receiver"
                 notificationsPermission:
                   type: boolean
+                  example: true
                 settingsPermission:
                   type: boolean
+                  example: false
                 expiresAt:
                   type: string
                   format: date-time
+                  example: "2024-01-22T10:30:00Z"
                 sentAt:
                   type: string
                   format: date-time
+                  example: "2024-01-15T10:30:00Z"
+              required:
+                - invitationId
+                - email
+                - deviceId
+                - deviceName
+                - notificationsPermission
+                - settingsPermission
+                - expiresAt
+                - sentAt
 
     Invitation:
       type: object
       properties:
         invitationId:
           type: string
+          format: uuid
+          example: "inv-123e4567-e89b-12d3-a456-426614174000"
         deviceId:
           type: string
+          example: "acorn-receiver-001"
         deviceName:
           type: string
+          example: "Living Room Receiver"
         invitedBy:
           type: string
           description: Name/email of user who sent invitation
+          example: "owner@example.com"
         notificationsPermission:
           type: boolean
+          example: true
         settingsPermission:
           type: boolean
+          example: false
         createdAt:
           type: string
           format: date-time
+          example: "2024-01-15T10:30:00Z"
         expiresAt:
           type: string
           format: date-time
+          example: "2024-01-22T10:30:00Z"
+      required:
+        - invitationId
+        - deviceId
+        - deviceName
+        - invitedBy
+        - notificationsPermission
+        - settingsPermission
+        - createdAt
+        - expiresAt
 
     UserInvitationsResponse:
       allOf:
@@ -739,6 +1276,10 @@ components:
                     $ref: '#/components/schemas/Invitation'
                 total:
                   type: integer
+                  example: 1
+              required:
+                - invitations
+                - total
 
     InvitationActionResponse:
       allOf:
@@ -750,18 +1291,32 @@ components:
               properties:
                 invitationId:
                   type: string
+                  format: uuid
+                  example: "inv-123e4567-e89b-12d3-a456-426614174000"
                 action:
                   type: string
                   enum: [accepted, declined]
+                  example: "accepted"
                 message:
                   type: string
+                  example: "Invitation accepted successfully"
                 processedAt:
                   type: string
                   format: date-time
+                  example: "2024-01-15T10:30:00Z"
                 deviceId:
                   type: string
+                  example: "acorn-receiver-001"
                 deviceName:
                   type: string
+                  example: "Living Room Receiver"
+              required:
+                - invitationId
+                - action
+                - message
+                - processedAt
+                - deviceId
+                - deviceName
 
 tags:
   - name: System
