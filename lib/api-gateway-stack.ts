@@ -300,6 +300,7 @@ export class ApiGatewayStack extends cdk.Stack {
         requestValidator,
         authorizer: this.cognitoAuthorizer,
         authorizationType: apigateway.AuthorizationType.COGNITO,
+        authorizationScopes: ['aws.cognito.signin.user.admin'],
       }
     );
 
@@ -315,6 +316,7 @@ export class ApiGatewayStack extends cdk.Stack {
         requestValidator,
         authorizer: this.cognitoAuthorizer,
         authorizationType: apigateway.AuthorizationType.COGNITO,
+        authorizationScopes: ['aws.cognito.signin.user.admin'],
       }
     );
 
@@ -327,6 +329,7 @@ export class ApiGatewayStack extends cdk.Stack {
         requestValidator,
         authorizer: this.cognitoAuthorizer,
         authorizationType: apigateway.AuthorizationType.COGNITO,
+        authorizationScopes: ['aws.cognito.signin.user.admin'],
       }
     );
 
@@ -339,6 +342,7 @@ export class ApiGatewayStack extends cdk.Stack {
         requestValidator,
         authorizer: this.cognitoAuthorizer,
         authorizationType: apigateway.AuthorizationType.COGNITO,
+        authorizationScopes: ['aws.cognito.signin.user.admin'],
       }
     );
 
@@ -352,6 +356,7 @@ export class ApiGatewayStack extends cdk.Stack {
         requestValidator,
         authorizer: this.cognitoAuthorizer,
         authorizationType: apigateway.AuthorizationType.COGNITO,
+        authorizationScopes: ['aws.cognito.signin.user.admin'],
       }
     );
 
@@ -368,6 +373,7 @@ export class ApiGatewayStack extends cdk.Stack {
         requestValidator,
         authorizer: this.cognitoAuthorizer,
         authorizationType: apigateway.AuthorizationType.COGNITO,
+        authorizationScopes: ['aws.cognito.signin.user.admin'],
       }
     );
 
@@ -380,6 +386,7 @@ export class ApiGatewayStack extends cdk.Stack {
         requestValidator,
         authorizer: this.cognitoAuthorizer,
         authorizationType: apigateway.AuthorizationType.COGNITO,
+        authorizationScopes: ['aws.cognito.signin.user.admin'],
       }
     );
 
@@ -396,6 +403,7 @@ export class ApiGatewayStack extends cdk.Stack {
         requestValidator,
         authorizer: this.cognitoAuthorizer,
         authorizationType: apigateway.AuthorizationType.COGNITO,
+        authorizationScopes: ['aws.cognito.signin.user.admin'],
       }
     );
 
@@ -408,6 +416,7 @@ export class ApiGatewayStack extends cdk.Stack {
         requestValidator,
         authorizer: this.cognitoAuthorizer,
         authorizationType: apigateway.AuthorizationType.COGNITO,
+        authorizationScopes: ['aws.cognito.signin.user.admin'],
       }
     );
 
