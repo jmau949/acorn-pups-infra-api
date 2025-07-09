@@ -79,6 +79,8 @@ Alternative: build a **shared Lambda Layer** and attach it to every function.
 ---
 ## 4. How to know if a package is already in the runtime
 
+DO NOT USE AWS SDK V3 FROM RUNTIME DUE TO UPDATES/DOWNTIME, IMPORT AS LAYER
+
 The managed Node.js runtimes are intentionally minimal.  As of mid-2025 they contain:
 
 * The **Node.js standard library** (built-ins such as `fs`, `path`, `crypto`, …)  

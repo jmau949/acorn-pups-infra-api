@@ -3,12 +3,15 @@ import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
+import * as cognito from 'aws-cdk-lib/aws-cognito';
 import { Construct } from 'constructs';
 import { ApiGatewayStackProps } from './types';
 import { ParameterStoreHelper } from './parameter-store-helper';
 
 export class ApiGatewayStack extends cdk.Stack {
   public readonly api: apigateway.RestApi;
+  public readonly cognitoAuthorizer: apigateway.CognitoUserPoolsAuthorizer;
 
   constructor(scope: Construct, id: string, props: ApiGatewayStackProps) {
     super(scope, id, props);
@@ -82,6 +85,9 @@ export class ApiGatewayStack extends cdk.Stack {
       // Minimum compression size  
       minCompressionSize: cdk.Size.bytes(1024),
     });
+
+    // Create Cognito User Pool authorizer
+    this.cognitoAuthorizer = this.createCognitoAuthorizer(props);
 
     // Configure gateway responses for standardized error handling
     this.configureGatewayResponses();
@@ -292,7 +298,8 @@ export class ApiGatewayStack extends cdk.Stack {
       {
         methodResponses,
         requestValidator,
-        // TODO: Add Cognito authorizer
+        authorizer: this.cognitoAuthorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
       }
     );
 
@@ -306,7 +313,8 @@ export class ApiGatewayStack extends cdk.Stack {
       {
         methodResponses,
         requestValidator,
-        // TODO: Add Cognito authorizer
+        authorizer: this.cognitoAuthorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
       }
     );
 
@@ -317,7 +325,8 @@ export class ApiGatewayStack extends cdk.Stack {
       {
         methodResponses,
         requestValidator,
-        // TODO: Add Cognito authorizer
+        authorizer: this.cognitoAuthorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
       }
     );
 
@@ -328,7 +337,8 @@ export class ApiGatewayStack extends cdk.Stack {
       {
         methodResponses,
         requestValidator,
-        // TODO: Add Cognito authorizer
+        authorizer: this.cognitoAuthorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
       }
     );
 
@@ -340,7 +350,8 @@ export class ApiGatewayStack extends cdk.Stack {
       {
         methodResponses,
         requestValidator,
-        // TODO: Add Cognito authorizer
+        authorizer: this.cognitoAuthorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
       }
     );
 
@@ -355,7 +366,8 @@ export class ApiGatewayStack extends cdk.Stack {
       {
         methodResponses,
         requestValidator,
-        // TODO: Add Cognito authorizer
+        authorizer: this.cognitoAuthorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
       }
     );
 
@@ -366,7 +378,8 @@ export class ApiGatewayStack extends cdk.Stack {
       {
         methodResponses,
         requestValidator,
-        // TODO: Add Cognito authorizer
+        authorizer: this.cognitoAuthorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
       }
     );
 
@@ -381,7 +394,8 @@ export class ApiGatewayStack extends cdk.Stack {
       {
         methodResponses,
         requestValidator,
-        // TODO: Add Cognito authorizer
+        authorizer: this.cognitoAuthorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
       }
     );
 
@@ -392,7 +406,8 @@ export class ApiGatewayStack extends cdk.Stack {
       {
         methodResponses,
         requestValidator,
-        // TODO: Add Cognito authorizer
+        authorizer: this.cognitoAuthorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
       }
     );
 
@@ -434,7 +449,32 @@ export class ApiGatewayStack extends cdk.Stack {
         description: 'API Gateway deployment stage',
         exportName: `acorn-pups-${props.environment}-api-stage`,
       },
+      {
+        outputId: 'CognitoAuthorizerId',
+        value: this.cognitoAuthorizer.authorizerId,
+        description: 'Cognito User Pool authorizer ID',
+        exportName: `acorn-pups-${props.environment}-cognito-authorizer-id`,
+      },
     ]);
+  }
+
+  private createCognitoAuthorizer(props: ApiGatewayStackProps): apigateway.CognitoUserPoolsAuthorizer {
+    // Get the User Pool ID from Parameter Store
+    const userPoolId = ssm.StringParameter.valueForStringParameter(
+      this,
+      `/acorn-pups/${props.environment}/cognito/user-pool/id`,
+    );
+
+    // Reference the existing User Pool
+    const userPool = cognito.UserPool.fromUserPoolId(this, 'ImportedUserPool', userPoolId);
+
+    // Create the Cognito User Pool authorizer
+    return new apigateway.CognitoUserPoolsAuthorizer(this, 'CognitoAuthorizer', {
+      cognitoUserPools: [userPool],
+      identitySource: 'method.request.header.Authorization',
+      authorizerName: `acorn-pups-${props.environment}-cognito-authorizer`,
+      resultsCacheTtl: cdk.Duration.minutes(5),
+    });
   }
 
   private configureGatewayResponses() {
