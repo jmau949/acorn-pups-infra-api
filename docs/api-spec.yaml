@@ -14,6 +14,11 @@ info:
     Most endpoints require authentication via AWS Cognito JWT tokens.
     Include the token in the Authorization header: `Bearer <token>`
     
+    ## User Registration
+    User accounts are created automatically via Cognito post-confirmation triggers
+    during the sign-up process. The API focuses on device and access management
+    for existing users only.
+    
     ## Rate Limiting
     - Development: 100 requests/second, 200 burst
     - Production: 1000 requests/second, 2000 burst
@@ -23,6 +28,7 @@ info:
     - ESP32 receivers process button presses in real-time
     - Push notifications sent to all authorized users
     - No persistent storage of button press events (MVP)
+    - User creation handled by Cognito post-confirmation triggers
     
     ## Request Tracing
     All requests include a unique `requestId` in responses for observability.
@@ -99,7 +105,12 @@ paths:
   /devices/register:
     post:
       summary: Register a new device
-      description: Register a new ESP32 receiver device for the authenticated user
+      description: |
+        Register a new ESP32 receiver device for the authenticated user. 
+        This endpoint handles only device registration 
+        
+        The authenticated user (identified by JWT token) must already exist in the 
+        Users table before calling this endpoint.
       tags:
         - Device Management
       parameters:
