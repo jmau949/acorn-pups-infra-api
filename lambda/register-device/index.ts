@@ -59,23 +59,25 @@ export const handler = async (
       );
     }
 
-    // Basic validation patterns
-    const deviceIdPattern = /^[a-zA-Z0-9\-_]+$/;
-    const deviceNamePattern = /^[a-zA-Z0-9\s\-_.]+$/;
-    // More realistic serial number pattern - allows alphanumeric, hyphens, underscores, and periods
-    const serialNumberPattern = /^[a-zA-Z0-9\-_.]+$/;
-    const macAddressPattern = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/;
+    // Basic validation patterns - loosened to avoid false rejections
+    const deviceIdPattern = /^[a-zA-Z0-9_.@#+-]+$/; // Allow common special characters
+    const deviceNamePattern = /^[\p{L}\p{N}\p{P}\p{Z}]+$/u; // Allow Unicode letters, numbers, punctuation, and spaces
+    // Permissive serial number pattern - allows alphanumeric and common special chars
+    const serialNumberPattern = /^[\w\-.@#+&(){}[\]/\\|*%$!~`'"<>?=^]+$/;
+    // More flexible MAC address pattern - accepts various separators and formats
+    const macAddressPattern = /^([0-9A-Fa-f]{2}[:.\-]?){5}[0-9A-Fa-f]{2}$|^[0-9A-Fa-f]{12}$/;
+
 
     if (!deviceIdPattern.test(deviceId)) {
-      return ResponseHandler.badRequest('deviceId format is invalid', requestId);
+      return ResponseHandler.badRequest('deviceId contains invalid characters', requestId);
     }
 
-    if (deviceName.length < 1 || deviceName.length > 50 || !deviceNamePattern.test(deviceName)) {
-      return ResponseHandler.badRequest('deviceName format is invalid', requestId);
+    if (deviceName.length < 1 || deviceName.length > 100 || !deviceNamePattern.test(deviceName)) {
+      return ResponseHandler.badRequest('deviceName format is invalid or too long (max 100 characters)', requestId);
     }
 
-    if (serialNumber.length < 1 || serialNumber.length > 50 || !serialNumberPattern.test(serialNumber)) {
-      return ResponseHandler.badRequest('serialNumber format is invalid. Must contain only letters, numbers, hyphens, underscores, and periods', requestId);
+    if (serialNumber.length < 1 || serialNumber.length > 100 || !serialNumberPattern.test(serialNumber)) {
+      return ResponseHandler.badRequest('serialNumber format is invalid or too long (max 100 characters)', requestId);
     }
 
     if (!macAddressPattern.test(macAddress)) {
