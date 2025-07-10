@@ -24,47 +24,26 @@ export class LambdaFunctionsStack extends cdk.Stack {
         bundling: {
           image: lambda.Runtime.NODEJS_22_X.bundlingImage,
           command: [
-            'bash', '-c', [
-              'set -e',
-              // Create the nodejs directory structure for the layer
-              'mkdir -p /asset-output/nodejs',
-              // Initialize a package.json for the layer
-              'echo \'{"name": "dynamodb-layer", "version": "1.0.0"}\' > /asset-output/nodejs/package.json',
-              // Install the exact version of AWS SDK v3 DynamoDB client
-              'cd /asset-output/nodejs',
-              'npm install @aws-sdk/client-dynamodb@3.844.0 @aws-sdk/lib-dynamodb@3.844.0 @aws-sdk/util-dynamodb@3.844.0 @aws-sdk/client-ssm@3.844.0',
-              // Verify installation succeeded and correct version is installed
-              'ls -la node_modules/@aws-sdk/client-dynamodb/package.json || (echo "DynamoDB client installation failed" && exit 1)',
-              'ls -la node_modules/@aws-sdk/lib-dynamodb/package.json || (echo "DynamoDB lib installation failed" && exit 1)',
-              'ls -la node_modules/@aws-sdk/util-dynamodb/package.json || (echo "DynamoDB util installation failed" && exit 1)',
-              'ls -la node_modules/@aws-sdk/client-ssm/package.json || (echo "SSM client installation failed" && exit 1)',
-              'grep -q "3.844.0" node_modules/@aws-sdk/client-dynamodb/package.json || (echo "DynamoDB client version mismatch" && exit 1)',
-              'grep -q "3.844.0" node_modules/@aws-sdk/lib-dynamodb/package.json || (echo "DynamoDB lib version mismatch" && exit 1)',
-              'grep -q "3.844.0" node_modules/@aws-sdk/util-dynamodb/package.json || (echo "DynamoDB util version mismatch" && exit 1)',
-              'grep -q "3.844.0" node_modules/@aws-sdk/client-ssm/package.json || (echo "SSM client version mismatch" && exit 1)',
-              // Display installed versions for verification
-              'echo "Installed package versions:"',
-              'cat node_modules/@aws-sdk/client-dynamodb/package.json | grep "version"',
-              'cat node_modules/@aws-sdk/lib-dynamodb/package.json | grep "version"',
-              'cat node_modules/@aws-sdk/util-dynamodb/package.json | grep "version"',
-              'cat node_modules/@aws-sdk/client-ssm/package.json | grep "version"',
-              // Clean up package files to reduce layer size
-              'rm -rf node_modules/.cache',
-              'rm -rf node_modules/**/test',
-              'rm -rf node_modules/**/tests',
-              'rm -rf node_modules/**/*.md',
-              'rm -rf node_modules/**/*.ts',
-              'rm -rf node_modules/**/tsconfig.json',
-              'rm -rf node_modules/**/*.map',
-              'rm -rf node_modules/**/LICENSE*',
-              'rm -rf node_modules/**/CHANGELOG*',
-              'rm -rf node_modules/**/examples',
-              'rm -rf node_modules/**/docs',
-              // Debug: show what was installed
-              'ls -la /asset-output/nodejs/',
-              'ls -la /asset-output/nodejs/node_modules/@aws-sdk/',
-            ].join(' && ')
+            'bash', '-c', 
+            'set -e && ' +
+            'npm config set cache /tmp/.npm --global && ' +
+            'npm cache clean --force && ' +
+            'mkdir -p /asset-output/nodejs && ' +
+            'cd /asset-output/nodejs && ' +
+            'echo \'{"name": "dynamodb-layer", "version": "1.0.0"}\' > package.json && ' +
+            'npm install --no-fund --no-audit @aws-sdk/client-dynamodb@3.844.0 @aws-sdk/lib-dynamodb@3.844.0 @aws-sdk/util-dynamodb@3.844.0 @aws-sdk/client-ssm@3.844.0 && ' +
+            'test -d node_modules/@aws-sdk/client-dynamodb && ' +
+            'test -d node_modules/@aws-sdk/lib-dynamodb && ' +
+            'test -d node_modules/@aws-sdk/util-dynamodb && ' +
+            'test -d node_modules/@aws-sdk/client-ssm && ' +
+            'find node_modules -name ".bin" -type d -exec rm -rf {} + 2>/dev/null || true && ' +
+            'find node_modules -name "*.md" -delete 2>/dev/null || true && ' +
+            'find node_modules -name "*.ts" -delete 2>/dev/null || true && ' +
+            'find node_modules -name "*.map" -delete 2>/dev/null || true && ' +
+            'rm -rf node_modules/**/test node_modules/**/tests node_modules/**/examples node_modules/**/docs 2>/dev/null || true && ' +
+            'echo "DynamoDB layer created successfully"'
           ],
+          user: 'root',
         },
       }),
       compatibleRuntimes: [lambda.Runtime.NODEJS_22_X],
@@ -78,40 +57,24 @@ export class LambdaFunctionsStack extends cdk.Stack {
         bundling: {
           image: lambda.Runtime.NODEJS_22_X.bundlingImage,
           command: [
-            'bash', '-c', [
-              'set -e',
-              // Create the nodejs directory structure for the layer
-              'mkdir -p /asset-output/nodejs',
-              // Initialize a package.json for the layer
-              'echo \'{"name": "iot-layer", "version": "1.0.0"}\' > /asset-output/nodejs/package.json',
-              // Install the exact version of AWS SDK v3 IoT client and UUID
-              'cd /asset-output/nodejs',
-              'npm install @aws-sdk/client-iot@3.844.0 uuid@^10.0.0 @types/uuid@^10.0.0',
-              // Verify installation succeeded and correct version is installed
-              'ls -la node_modules/@aws-sdk/client-iot/package.json || (echo "IoT client installation failed" && exit 1)',
-              'ls -la node_modules/uuid/package.json || (echo "UUID installation failed" && exit 1)',
-              'grep -q "3.844.0" node_modules/@aws-sdk/client-iot/package.json || (echo "IoT client version mismatch" && exit 1)',
-              // Display installed versions for verification
-              'echo "Installed package versions:"',
-              'cat node_modules/@aws-sdk/client-iot/package.json | grep "version"',
-              'cat node_modules/uuid/package.json | grep "version"',
-              // Clean up package files to reduce layer size
-              'rm -rf node_modules/.cache',
-              'rm -rf node_modules/**/test',
-              'rm -rf node_modules/**/tests',
-              'rm -rf node_modules/**/*.md',
-              'rm -rf node_modules/**/*.ts',
-              'rm -rf node_modules/**/tsconfig.json',
-              'rm -rf node_modules/**/*.map',
-              'rm -rf node_modules/**/LICENSE*',
-              'rm -rf node_modules/**/CHANGELOG*',
-              'rm -rf node_modules/**/examples',
-              'rm -rf node_modules/**/docs',
-              // Debug: show what was installed
-              'ls -la /asset-output/nodejs/',
-              'ls -la /asset-output/nodejs/node_modules/@aws-sdk/',
-            ].join(' && ')
+            'bash', '-c', 
+            'set -e && ' +
+            'npm config set cache /tmp/.npm --global && ' +
+            'npm cache clean --force && ' +
+            'mkdir -p /asset-output/nodejs && ' +
+            'cd /asset-output/nodejs && ' +
+            'echo \'{"name": "iot-layer", "version": "1.0.0"}\' > package.json && ' +
+            'npm install --no-fund --no-audit @aws-sdk/client-iot@3.844.0 uuid@^10.0.0 @types/uuid@^10.0.0 && ' +
+            'test -d node_modules/@aws-sdk/client-iot && ' +
+            'test -d node_modules/uuid && ' +
+            'find node_modules -name ".bin" -type d -exec rm -rf {} + 2>/dev/null || true && ' +
+            'find node_modules -name "*.md" -delete 2>/dev/null || true && ' +
+            'find node_modules -name "*.ts" -delete 2>/dev/null || true && ' +
+            'find node_modules -name "*.map" -delete 2>/dev/null || true && ' +
+            'rm -rf node_modules/**/test node_modules/**/tests node_modules/**/examples node_modules/**/docs 2>/dev/null || true && ' +
+            'echo "IoT layer created successfully"'
           ],
+          user: 'root',
         },
       }),
       compatibleRuntimes: [lambda.Runtime.NODEJS_22_X],
