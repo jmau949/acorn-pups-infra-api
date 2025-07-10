@@ -21,22 +21,9 @@ Because the two code paths are deployed differently, the way we declare and pack
 > The zip that CDK uploads only contains whatever files you place in `/asset-output` during phase C. At the moment that is *just* `index.js` plus the helper files in `lambda/shared/` – **`node_modules` is completely absent.**
 
 
-## 2. Adding a dependency **to one Lambda only**
 
-### Scenario A – The dependency already exists in the Lambda runtime (example: any service client from AWS SDK v3)
 
-1. Install it as a **dev dependency** so that TypeScript has the typings:
-   ```powershell
-   npm install --save-dev @aws-sdk/client-dynamodb
-   ```
-2. Import it in your handler:
-   ```ts
-   // lambda/register-device/index.ts
-   import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-   ```
-3. Deploy as usual – no changes to `lib/lambda-functions-stack.ts` are required because the code is **already present** in the managed runtime.
-
-### Scenario B – The library is *not* present in the runtime (e.g. `uuid`, `lodash`)
+### Scenario
 
 Choose **one** of the following approaches:
 

@@ -17,6 +17,57 @@ export class LambdaFunctionsStack extends cdk.Stack {
     cdk.Tags.of(this).add('Environment', props.environment);
     cdk.Tags.of(this).add('Component', 'lambda-functions');
 
+    // **Create DynamoDB Layer with AWS SDK v3.844.0 (latest as of 2024-12-16)**
+    const dynamoDbLayer = new lambda.LayerVersion(this, 'DynamoDbLayer', {
+      layerVersionName: `acorn-pups-${props.environment}-dynamodb-layer`,
+      code: lambda.Code.fromAsset('.', {
+        bundling: {
+          image: lambda.Runtime.NODEJS_22_X.bundlingImage,
+          command: [
+            'bash', '-c', [
+              'set -e',
+              // Create the nodejs directory structure for the layer
+              'mkdir -p /asset-output/nodejs',
+              // Initialize a package.json for the layer
+              'echo \'{"name": "dynamodb-layer", "version": "1.0.0"}\' > /asset-output/nodejs/package.json',
+              // Install the exact version of AWS SDK v3 DynamoDB client
+              'cd /asset-output/nodejs',
+              'npm install @aws-sdk/client-dynamodb@3.844.0 @aws-sdk/lib-dynamodb@3.844.0 @aws-sdk/util-dynamodb@3.844.0',
+              // Verify installation succeeded and correct version is installed
+              'ls -la node_modules/@aws-sdk/client-dynamodb/package.json || (echo "DynamoDB client installation failed" && exit 1)',
+              'ls -la node_modules/@aws-sdk/lib-dynamodb/package.json || (echo "DynamoDB lib installation failed" && exit 1)',
+              'ls -la node_modules/@aws-sdk/util-dynamodb/package.json || (echo "DynamoDB util installation failed" && exit 1)',
+              'grep -q "3.844.0" node_modules/@aws-sdk/client-dynamodb/package.json || (echo "DynamoDB client version mismatch" && exit 1)',
+              'grep -q "3.844.0" node_modules/@aws-sdk/lib-dynamodb/package.json || (echo "DynamoDB lib version mismatch" && exit 1)',
+              'grep -q "3.844.0" node_modules/@aws-sdk/util-dynamodb/package.json || (echo "DynamoDB util version mismatch" && exit 1)',
+              // Display installed versions for verification
+              'echo "Installed package versions:"',
+              'cat node_modules/@aws-sdk/client-dynamodb/package.json | grep "version"',
+              'cat node_modules/@aws-sdk/lib-dynamodb/package.json | grep "version"',
+              'cat node_modules/@aws-sdk/util-dynamodb/package.json | grep "version"',
+              // Clean up package files to reduce layer size
+              'rm -rf node_modules/.cache',
+              'rm -rf node_modules/**/test',
+              'rm -rf node_modules/**/tests',
+              'rm -rf node_modules/**/*.md',
+              'rm -rf node_modules/**/*.ts',
+              'rm -rf node_modules/**/tsconfig.json',
+              'rm -rf node_modules/**/*.map',
+              'rm -rf node_modules/**/LICENSE*',
+              'rm -rf node_modules/**/CHANGELOG*',
+              'rm -rf node_modules/**/examples',
+              'rm -rf node_modules/**/docs',
+              // Debug: show what was installed
+              'ls -la /asset-output/nodejs/',
+              'ls -la /asset-output/nodejs/node_modules/@aws-sdk/',
+            ].join(' && ')
+          ],
+        },
+      }),
+      compatibleRuntimes: [lambda.Runtime.NODEJS_22_X],
+      description: 'DynamoDB AWS SDK v3 layer (v3.844.0) for Acorn Pups Lambda functions',
+    });
+
     // Common environment variables for all functions
     const commonEnvironment = {
       ENVIRONMENT: props.environment,
@@ -279,6 +330,12 @@ export class LambdaFunctionsStack extends cdk.Stack {
       role: baseLambdaRole, // Now properly assigned
     };
 
+    // Common Lambda function configuration WITH DynamoDB Layer
+    const dynamoDbFunctionProps = {
+      ...commonFunctionProps,
+      layers: [dynamoDbLayer],
+    };
+
     // Health Check Function (no auth required)
     this.functions = {
       healthCheck: new lambda.Function(this, 'HealthCheckFunction', {
@@ -291,7 +348,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
 
       // Device Management Functions
       registerDevice: new lambda.Function(this, 'RegisterDeviceFunction', {
-        ...commonFunctionProps,
+        ...dynamoDbFunctionProps,
         functionName: `acorn-pups-${props.environment}-register-device`,
         code: createBundledCode('register-device'),
         handler: 'index.handler',
@@ -301,7 +358,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       }),
 
       getUserDevices: new lambda.Function(this, 'GetUserDevicesFunction', {
-        ...commonFunctionProps,
+        ...dynamoDbFunctionProps,
         functionName: `acorn-pups-${props.environment}-get-user-devices`,
         code: createBundledCode('get-user-devices'),
         handler: 'index.handler',
@@ -310,7 +367,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       }),
 
       updateDeviceSettings: new lambda.Function(this, 'UpdateDeviceSettingsFunction', {
-        ...commonFunctionProps,
+        ...dynamoDbFunctionProps,
         functionName: `acorn-pups-${props.environment}-update-device-settings`,
         code: createBundledCode('update-device-settings'),
         handler: 'index.handler',
@@ -319,7 +376,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       }),
 
       updateDeviceStatus: new lambda.Function(this, 'UpdateDeviceStatusFunction', {
-        ...commonFunctionProps,
+        ...dynamoDbFunctionProps,
         functionName: `acorn-pups-${props.environment}-update-device-status`,
         code: createBundledCode('update-device-status'),
         handler: 'index.handler',
@@ -328,7 +385,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       }),
 
       resetDevice: new lambda.Function(this, 'ResetDeviceFunction', {
-        ...commonFunctionProps,
+        ...dynamoDbFunctionProps,
         functionName: `acorn-pups-${props.environment}-reset-device`,
         code: createBundledCode('reset-device'),
         handler: 'index.handler',
@@ -338,7 +395,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
 
       // User Management Functions
       inviteUser: new lambda.Function(this, 'InviteUserFunction', {
-        ...commonFunctionProps,
+        ...dynamoDbFunctionProps,
         functionName: `acorn-pups-${props.environment}-invite-user`,
         code: createBundledCode('invite-user'),
         handler: 'index.handler',
@@ -347,7 +404,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       }),
 
       removeUserAccess: new lambda.Function(this, 'RemoveUserAccessFunction', {
-        ...commonFunctionProps,
+        ...dynamoDbFunctionProps,
         functionName: `acorn-pups-${props.environment}-remove-user-access`,
         code: createBundledCode('remove-user'),
         handler: 'index.handler',
@@ -356,7 +413,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       }),
 
       getUserInvitations: new lambda.Function(this, 'GetUserInvitationsFunction', {
-        ...commonFunctionProps,
+        ...dynamoDbFunctionProps,
         functionName: `acorn-pups-${props.environment}-get-user-invitations`,
         code: createBundledCode('get-user-invitations'),
         handler: 'index.handler',
@@ -366,7 +423,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
 
       // Invitation Management Functions
       acceptInvitation: new lambda.Function(this, 'AcceptInvitationFunction', {
-        ...commonFunctionProps,
+        ...dynamoDbFunctionProps,
         functionName: `acorn-pups-${props.environment}-accept-invitation`,
         code: createBundledCode('accept-invitation'),
         handler: 'index.handler',
@@ -375,7 +432,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       }),
 
       declineInvitation: new lambda.Function(this, 'DeclineInvitationFunction', {
-        ...commonFunctionProps,
+        ...dynamoDbFunctionProps,
         functionName: `acorn-pups-${props.environment}-decline-invitation`,
         code: createBundledCode('decline-invitation'),
         handler: 'index.handler',
@@ -385,7 +442,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
 
       // IoT Event Processing Functions
       handleButtonPress: new lambda.Function(this, 'HandleButtonPressFunction', {
-        ...commonFunctionProps,
+        ...dynamoDbFunctionProps,
         functionName: `acorn-pups-${props.environment}-handle-button-press`,
         code: createBundledCode('handle-button-press'),
         handler: 'index.handler',
@@ -455,6 +512,21 @@ export class LambdaFunctionsStack extends cdk.Stack {
       'Lambda execution role ARN (legacy)',
       `/acorn-pups/${props.environment}/lambda-functions/execution-role/arn`
     );
+
+    // Create parameter for DynamoDB layer
+    parameterHelper.createParameter(
+      'DynamoDbLayerArn',
+      dynamoDbLayer.layerVersionArn,
+      'DynamoDB Layer ARN with AWS SDK v3.844.0',
+      `/acorn-pups/${props.environment}/lambda-functions/dynamodb-layer/arn`
+    );
+
+    // Create CloudFormation outputs for DynamoDB layer
+    new cdk.CfnOutput(this, 'DynamoDbLayerArn', {
+      value: dynamoDbLayer.layerVersionArn,
+      description: 'ARN of the DynamoDB Layer with AWS SDK v3.844.0',
+      exportName: `acorn-pups-${props.environment}-dynamodb-layer-arn`,
+    });
 
     // Create CloudFormation outputs for all roles
     new cdk.CfnOutput(this, 'BaseLambdaRoleArn', {
