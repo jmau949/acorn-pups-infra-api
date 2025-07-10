@@ -1,11 +1,17 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, DeleteCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 
 // Initialize DynamoDB client with proper configuration
 const dynamoDBClient = new DynamoDBClient({
   region: process.env.REGION || 'us-east-1',
   maxAttempts: 3,
   retryMode: 'adaptive',
+});
+
+// Initialize SSM client for parameter store access
+const ssmClient = new SSMClient({
+  region: process.env.REGION || 'us-east-1',
 });
 
 // Create Document Client for easier JSON handling
@@ -24,29 +30,32 @@ const docClient = DynamoDBDocumentClient.from(dynamoDBClient, {
   },
 });
 
-// GSI Index Constants
+// GSI Index Constants - matching actual database schema
 const GSI_INDEXES = {
   // Users table indexes
-  USERS_EMAIL: 'GSI1',
-  USERS_COGNITO_SUB: 'GSI2',
+  USERS_EMAIL: 'GSI1',           // email (PK), user_id (SK)
+  USERS_COGNITO_SUB: 'GSI2',     // cognito_sub (PK), user_id (SK)
   // Devices table indexes  
-  DEVICES_OWNER: 'GSI1',
-  DEVICES_SERIAL: 'GSI2',
+  DEVICES_OWNER: 'GSI1',         // owner_user_id (PK), device_id (SK)
+  DEVICES_SERIAL: 'GSI2',        // serial_number (PK), device_id (SK)
   // DeviceUsers table indexes
-  DEVICE_USERS_BY_USER: 'GSI1',
+  DEVICE_USERS_BY_USER: 'GSI1',  // user_id (PK), device_id (SK)
   // Invitations table indexes
-  INVITATIONS_BY_DEVICE: 'GSI1',
-  INVITATIONS_BY_EMAIL: 'GSI2',
+  INVITATIONS_BY_DEVICE: 'GSI1', // device_id (PK), created_at (SK)
+  INVITATIONS_BY_EMAIL: 'GSI2',  // invited_email (PK), created_at (SK)
 } as const;
 
-// Table name constants
-const TABLES = {
-  USERS: 'Users',
-  DEVICES: 'Devices', 
-  DEVICE_USERS: 'DeviceUsers',
-  INVITATIONS: 'Invitations',
-  DEVICE_STATUS: 'DeviceStatus',
+// Table name constants for parameter store paths
+const TABLE_PARAMS = {
+  USERS: 'users',
+  DEVICES: 'devices', 
+  DEVICE_USERS: 'device-users',
+  INVITATIONS: 'invitations',
+  DEVICE_STATUS: 'device-status',
 } as const;
+
+// Cache for table names to avoid repeated parameter store calls
+const tableNameCache = new Map<string, string>();
 
 // Custom error classes for better error handling
 export class DynamoDBError extends Error {
@@ -71,17 +80,46 @@ export class DynamoDBHelper {
   private static environment = process.env.ENVIRONMENT || 'dev';
   
   /**
-   * Get the full table name with environment prefix
+   * Get the table name from parameter store with caching
    */
-  static getTableName(tableName: string): string {
-    return `acorn-pups-${this.environment}-${tableName}`;
+  static async getTableName(tableParam: string): Promise<string> {
+    // Check cache first
+    if (tableNameCache.has(tableParam)) {
+      return tableNameCache.get(tableParam)!;
+    }
+
+    try {
+      const parameterPath = `/acorn-pups/${this.environment}/dynamodb-tables/${tableParam}/name`;
+      
+      const command = new GetParameterCommand({
+        Name: parameterPath,
+      });
+      
+      const response = await ssmClient.send(command);
+      
+      if (!response.Parameter?.Value) {
+        throw new Error(`Parameter ${parameterPath} not found`);
+      }
+      
+      const tableName = response.Parameter.Value;
+      // Cache the result
+      tableNameCache.set(tableParam, tableName);
+      
+      return tableName;
+    } catch (error) {
+      // Fallback to constructed name if parameter store fails
+      console.warn(`Failed to get table name from parameter store for ${tableParam}, using fallback`);
+      const fallbackName = `acorn-pups-${tableParam}-${this.environment}`;
+      tableNameCache.set(tableParam, fallbackName);
+      return fallbackName;
+    }
   }
 
   /**
    * Log DynamoDB operations for debugging
    */
   private static log(operation: string, tableName: string, details?: any) {
-    if (process.env.NODE_ENV !== 'production') {
+    if (process.env.LOG_LEVEL === 'DEBUG' || process.env.NODE_ENV !== 'production') {
       console.log(`[DynamoDB] ${operation} on ${tableName}`, details ? JSON.stringify(details, null, 2) : '');
     }
   }
@@ -89,12 +127,13 @@ export class DynamoDBHelper {
   /**
    * Get a single item from DynamoDB with error handling
    */
-  static async getItem(tableName: string, key: Record<string, any>, throwIfNotFound = false) {
+  static async getItem(tableParam: string, key: Record<string, any>, throwIfNotFound = false) {
     try {
+      const tableName = await this.getTableName(tableParam);
       this.log('GetItem', tableName, { key });
       
       const command = new GetCommand({
-        TableName: this.getTableName(tableName),
+        TableName: tableName,
         Key: key,
       });
       
@@ -110,7 +149,7 @@ export class DynamoDBHelper {
         throw error;
       }
       throw new DynamoDBError(
-        `Failed to get item from ${tableName}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Failed to get item from ${tableParam}: ${error instanceof Error ? error.message : 'Unknown error'}`,
         'GetItem',
         error instanceof Error ? error : undefined
       );
@@ -120,19 +159,20 @@ export class DynamoDBHelper {
   /**
    * Put an item into DynamoDB with error handling
    */
-  static async putItem(tableName: string, item: Record<string, any>) {
+  static async putItem(tableParam: string, item: Record<string, any>) {
     try {
+      const tableName = await this.getTableName(tableParam);
       this.log('PutItem', tableName, { item });
       
       const command = new PutCommand({
-        TableName: this.getTableName(tableName),
+        TableName: tableName,
         Item: item,
       });
       
       return await docClient.send(command);
     } catch (error) {
       throw new DynamoDBError(
-        `Failed to put item to ${tableName}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Failed to put item to ${tableParam}: ${error instanceof Error ? error.message : 'Unknown error'}`,
         'PutItem',
         error instanceof Error ? error : undefined
       );
@@ -143,17 +183,18 @@ export class DynamoDBHelper {
    * Update an item in DynamoDB with error handling
    */
   static async updateItem(
-    tableName: string, 
+    tableParam: string, 
     key: Record<string, any>, 
     updateExpression: string,
     expressionAttributeValues?: Record<string, any>,
     expressionAttributeNames?: Record<string, string>
   ) {
     try {
+      const tableName = await this.getTableName(tableParam);
       this.log('UpdateItem', tableName, { key, updateExpression });
       
       const command = new UpdateCommand({
-        TableName: this.getTableName(tableName),
+        TableName: tableName,
         Key: key,
         UpdateExpression: updateExpression,
         ExpressionAttributeValues: expressionAttributeValues,
@@ -164,7 +205,7 @@ export class DynamoDBHelper {
       return await docClient.send(command);
     } catch (error) {
       throw new DynamoDBError(
-        `Failed to update item in ${tableName}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Failed to update item in ${tableParam}: ${error instanceof Error ? error.message : 'Unknown error'}`,
         'UpdateItem',
         error instanceof Error ? error : undefined
       );
@@ -174,19 +215,20 @@ export class DynamoDBHelper {
   /**
    * Delete an item from DynamoDB with error handling
    */
-  static async deleteItem(tableName: string, key: Record<string, any>) {
+  static async deleteItem(tableParam: string, key: Record<string, any>) {
     try {
+      const tableName = await this.getTableName(tableParam);
       this.log('DeleteItem', tableName, { key });
       
       const command = new DeleteCommand({
-        TableName: this.getTableName(tableName),
+        TableName: tableName,
         Key: key,
       });
       
       return await docClient.send(command);
     } catch (error) {
       throw new DynamoDBError(
-        `Failed to delete item from ${tableName}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Failed to delete item from ${tableParam}: ${error instanceof Error ? error.message : 'Unknown error'}`,
         'DeleteItem',
         error instanceof Error ? error : undefined
       );
@@ -197,7 +239,7 @@ export class DynamoDBHelper {
    * Query items from DynamoDB with error handling and optimization
    */
   static async queryItems(
-    tableName: string,
+    tableParam: string,
     keyConditionExpression: string,
     expressionAttributeValues?: Record<string, any>,
     expressionAttributeNames?: Record<string, string>,
@@ -206,6 +248,7 @@ export class DynamoDBHelper {
     scanIndexForward?: boolean
   ) {
     try {
+      const tableName = await this.getTableName(tableParam);
       this.log('QueryItems', tableName, { 
         keyConditionExpression, 
         indexName, 
@@ -214,7 +257,7 @@ export class DynamoDBHelper {
       });
       
       const command = new QueryCommand({
-        TableName: this.getTableName(tableName),
+        TableName: tableName,
         KeyConditionExpression: keyConditionExpression,
         ExpressionAttributeValues: expressionAttributeValues,
         ExpressionAttributeNames: expressionAttributeNames,
@@ -227,82 +270,74 @@ export class DynamoDBHelper {
       return response.Items || [];
     } catch (error) {
       throw new DynamoDBError(
-        `Failed to query items from ${tableName}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Failed to query items from ${tableParam}: ${error instanceof Error ? error.message : 'Unknown error'}`,
         'QueryItems',
         error instanceof Error ? error : undefined
       );
     }
   }
 
-  // ========================================
-  // OPTIMIZED QUERY METHODS USING INDEXES
-  // ========================================
+  // ============================================================
+  // OPTIMIZED QUERY METHODS USING INDEXES - NO SCANS
+  // ============================================================
 
   /**
-   * Get user by Cognito sub (for device registration) - Uses GSI2
+   * Get user by Cognito sub ID using GSI2
    */
   static async getUserByCognitoSub(cognitoSub: string) {
-    const items = await this.queryItems(
-      TABLES.USERS,
-      'GSI2PK = :cognitoSub',
+    return await this.queryItems(
+      TABLE_PARAMS.USERS,
+      'cognito_sub = :cognitoSub',
       { ':cognitoSub': cognitoSub },
       undefined,
       GSI_INDEXES.USERS_COGNITO_SUB
     );
-    return items.length > 0 ? items[0] : null;
   }
 
   /**
-   * Get user by email - Uses GSI1
+   * Get user by email using GSI1
    */
   static async getUserByEmail(email: string) {
-    const items = await this.queryItems(
-      TABLES.USERS,
-      'GSI1PK = :email',
+    return await this.queryItems(
+      TABLE_PARAMS.USERS,
+      'email = :email',
       { ':email': email },
       undefined,
       GSI_INDEXES.USERS_EMAIL
     );
-    return items.length > 0 ? items[0] : null;
   }
 
   /**
-   * Get user's devices - Uses GSI1 on DeviceUsers table
+   * Get all devices a user has access to using GSI1
    */
   static async getUserDevices(userId: string) {
     return await this.queryItems(
-      TABLES.DEVICE_USERS,
-      'GSI1PK = :userId AND begins_with(GSI1SK, :devicePrefix)',
-      { 
-        ':userId': userId,
-        ':devicePrefix': '' // All device IDs
-      },
+      TABLE_PARAMS.DEVICE_USERS,
+      'user_id = :userId',
+      { ':userId': userId },
       undefined,
       GSI_INDEXES.DEVICE_USERS_BY_USER
     );
   }
 
   /**
-   * Get device users (for notifications) - Uses main table query
+   * Get device users by device ID (main table query)
    */
   static async getDeviceUsers(deviceId: string) {
     return await this.queryItems(
-      TABLES.DEVICE_USERS,
-      'PK = :deviceId AND begins_with(SK, :userPrefix)',
-      { 
-        ':deviceId': `DEVICE#${deviceId}`,
-        ':userPrefix': 'USER#'
-      }
+      TABLE_PARAMS.DEVICE_USERS,
+      'PK = :deviceId',
+      { ':deviceId': `DEVICE#${deviceId}` }
     );
   }
 
   /**
-   * Get devices owned by user - Uses GSI1 on Devices table
+   * Get devices owned by user using GSI1
    */
   static async getDevicesByOwner(userId: string) {
     return await this.queryItems(
-      TABLES.DEVICES,
-      'GSI1PK = :userId',
+      TABLE_PARAMS.DEVICES,
+      'owner_user_id = :userId',
       { ':userId': userId },
       undefined,
       GSI_INDEXES.DEVICES_OWNER
@@ -310,141 +345,112 @@ export class DynamoDBHelper {
   }
 
   /**
-   * Get device by serial number - Uses GSI2 on Devices table
+   * Get device by serial number using GSI2
    */
   static async getDeviceBySerial(serialNumber: string) {
-    const items = await this.queryItems(
-      TABLES.DEVICES,
-      'GSI2PK = :serial',
-      { ':serial': serialNumber },
+    return await this.queryItems(
+      TABLE_PARAMS.DEVICES,
+      'serial_number = :serialNumber',
+      { ':serialNumber': serialNumber },
       undefined,
       GSI_INDEXES.DEVICES_SERIAL
     );
-    return items.length > 0 ? items[0] : null;
   }
 
   /**
-   * Get device metadata - Direct item lookup
+   * Get device metadata by device ID (main table query)
    */
   static async getDeviceMetadata(deviceId: string) {
     return await this.getItem(
-      TABLES.DEVICES,
-      {
-        PK: `DEVICE#${deviceId}`,
-        SK: 'METADATA'
-      }
+      TABLE_PARAMS.DEVICES,
+      { PK: `DEVICE#${deviceId}`, SK: 'METADATA' }
     );
   }
 
   /**
-   * Get device settings - Direct item lookup
+   * Get device settings by device ID (main table query)
    */
   static async getDeviceSettings(deviceId: string) {
     return await this.getItem(
-      TABLES.DEVICES,
-      {
-        PK: `DEVICE#${deviceId}`,
-        SK: 'SETTINGS'
-      }
+      TABLE_PARAMS.DEVICES,
+      { PK: `DEVICE#${deviceId}`, SK: 'SETTINGS' }
     );
   }
 
   /**
-   * Get user's pending invitations - Uses GSI2 on Invitations table
+   * Get user invitations by email using GSI2
    */
   static async getUserInvitations(email: string) {
     return await this.queryItems(
-      TABLES.INVITATIONS,
-      'GSI2PK = :email',
+      TABLE_PARAMS.INVITATIONS,
+      'invited_email = :email',
       { ':email': email },
       undefined,
-      GSI_INDEXES.INVITATIONS_BY_EMAIL,
-      undefined,
-      false // Latest first
+      GSI_INDEXES.INVITATIONS_BY_EMAIL
     );
   }
 
   /**
-   * Get device invitations - Uses GSI1 on Invitations table
+   * Get device invitations using GSI1
    */
   static async getDeviceInvitations(deviceId: string) {
     return await this.queryItems(
-      TABLES.INVITATIONS,
-      'GSI1PK = :deviceId',
+      TABLE_PARAMS.INVITATIONS,
+      'device_id = :deviceId',
       { ':deviceId': deviceId },
       undefined,
-      GSI_INDEXES.INVITATIONS_BY_DEVICE,
-      undefined,
-      false // Latest first
+      GSI_INDEXES.INVITATIONS_BY_DEVICE
     );
   }
 
   /**
-   * Get device status by type - Direct item lookup
+   * Get specific device status by type (main table query)
    */
   static async getDeviceStatus(deviceId: string, statusType: 'CURRENT' | 'HEALTH' | 'CONNECTIVITY') {
     return await this.getItem(
-      TABLES.DEVICE_STATUS,
-      {
-        PK: `DEVICE#${deviceId}`,
-        SK: `STATUS#${statusType}`
-      }
+      TABLE_PARAMS.DEVICE_STATUS,
+      { PK: `DEVICE#${deviceId}`, SK: statusType }
     );
   }
 
   /**
-   * Get all device status records - Query by device
+   * Get all device status entries (main table query)
    */
   static async getAllDeviceStatus(deviceId: string) {
     return await this.queryItems(
-      TABLES.DEVICE_STATUS,
-      'PK = :deviceId AND begins_with(SK, :statusPrefix)',
-      { 
-        ':deviceId': `DEVICE#${deviceId}`,
-        ':statusPrefix': 'STATUS#'
-      }
+      TABLE_PARAMS.DEVICE_STATUS,
+      'PK = :deviceId',
+      { ':deviceId': `DEVICE#${deviceId}` }
     );
   }
 
   /**
-   * Get user profile - Direct item lookup
+   * Get user profile (main table query)
    */
   static async getUserProfile(userId: string) {
     return await this.getItem(
-      TABLES.USERS,
-      {
-        PK: `USER#${userId}`,
-        SK: 'PROFILE'
-      }
+      TABLE_PARAMS.USERS,
+      { PK: `USER#${userId}`, SK: 'PROFILE' }
     );
   }
 
   /**
-   * Get invitation by ID - Direct item lookup
+   * Get specific invitation by ID (main table query)
    */
   static async getInvitation(invitationId: string) {
     return await this.getItem(
-      TABLES.INVITATIONS,
-      {
-        PK: `INVITATION#${invitationId}`,
-        SK: 'METADATA'
-      }
+      TABLE_PARAMS.INVITATIONS,
+      { PK: `INVITATION#${invitationId}`, SK: 'METADATA' }
     );
   }
 
   /**
-   * Check if user has access to device - Direct item lookup
+   * Check user device access (main table query)
    */
   static async getUserDeviceAccess(deviceId: string, userId: string) {
     return await this.getItem(
-      TABLES.DEVICE_USERS,
-      {
-        PK: `DEVICE#${deviceId}`,
-        SK: `USER#${userId}`
-      }
+      TABLE_PARAMS.DEVICE_USERS,
+      { PK: `DEVICE#${deviceId}`, SK: `USER#${userId}` }
     );
   }
-}
-
-// Export the raw clients for advanced use cases
-export { dynamoDBClient, docClient, GSI_INDEXES, TABLES }; 
+} 

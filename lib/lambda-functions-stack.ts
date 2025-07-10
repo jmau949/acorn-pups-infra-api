@@ -17,7 +17,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
     cdk.Tags.of(this).add('Environment', props.environment);
     cdk.Tags.of(this).add('Component', 'lambda-functions');
 
-    // **Create DynamoDB Layer with AWS SDK v3.844.0 (latest as of 2024-12-16)**
+    // **Create DynamoDB & SSM Layer with AWS SDK v3.844.0 (latest as of 2024-12-16)**
     const dynamoDbLayer = new lambda.LayerVersion(this, 'DynamoDbLayer', {
       layerVersionName: `acorn-pups-${props.environment}-dynamodb-layer`,
       code: lambda.Code.fromAsset('.', {
@@ -32,19 +32,22 @@ export class LambdaFunctionsStack extends cdk.Stack {
               'echo \'{"name": "dynamodb-layer", "version": "1.0.0"}\' > /asset-output/nodejs/package.json',
               // Install the exact version of AWS SDK v3 DynamoDB client
               'cd /asset-output/nodejs',
-              'npm install @aws-sdk/client-dynamodb@3.844.0 @aws-sdk/lib-dynamodb@3.844.0 @aws-sdk/util-dynamodb@3.844.0',
+              'npm install @aws-sdk/client-dynamodb@3.844.0 @aws-sdk/lib-dynamodb@3.844.0 @aws-sdk/util-dynamodb@3.844.0 @aws-sdk/client-ssm@3.844.0',
               // Verify installation succeeded and correct version is installed
               'ls -la node_modules/@aws-sdk/client-dynamodb/package.json || (echo "DynamoDB client installation failed" && exit 1)',
               'ls -la node_modules/@aws-sdk/lib-dynamodb/package.json || (echo "DynamoDB lib installation failed" && exit 1)',
               'ls -la node_modules/@aws-sdk/util-dynamodb/package.json || (echo "DynamoDB util installation failed" && exit 1)',
+              'ls -la node_modules/@aws-sdk/client-ssm/package.json || (echo "SSM client installation failed" && exit 1)',
               'grep -q "3.844.0" node_modules/@aws-sdk/client-dynamodb/package.json || (echo "DynamoDB client version mismatch" && exit 1)',
               'grep -q "3.844.0" node_modules/@aws-sdk/lib-dynamodb/package.json || (echo "DynamoDB lib version mismatch" && exit 1)',
               'grep -q "3.844.0" node_modules/@aws-sdk/util-dynamodb/package.json || (echo "DynamoDB util version mismatch" && exit 1)',
+              'grep -q "3.844.0" node_modules/@aws-sdk/client-ssm/package.json || (echo "SSM client version mismatch" && exit 1)',
               // Display installed versions for verification
               'echo "Installed package versions:"',
               'cat node_modules/@aws-sdk/client-dynamodb/package.json | grep "version"',
               'cat node_modules/@aws-sdk/lib-dynamodb/package.json | grep "version"',
               'cat node_modules/@aws-sdk/util-dynamodb/package.json | grep "version"',
+              'cat node_modules/@aws-sdk/client-ssm/package.json | grep "version"',
               // Clean up package files to reduce layer size
               'rm -rf node_modules/.cache',
               'rm -rf node_modules/**/test',
@@ -65,7 +68,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
         },
       }),
       compatibleRuntimes: [lambda.Runtime.NODEJS_22_X],
-      description: 'DynamoDB AWS SDK v3 layer (v3.844.0) for Acorn Pups Lambda functions',
+      description: 'DynamoDB & SSM AWS SDK v3 layer (v3.844.0) for Acorn Pups Lambda functions',
     });
 
     // Common environment variables for all functions
@@ -154,9 +157,9 @@ export class LambdaFunctionsStack extends cdk.Stack {
             'dynamodb:ListTables',
           ],
           resources: [
-            // All Acorn Pups tables and their indexes
-            `arn:aws:dynamodb:${this.region}:${this.account}:table/acorn-pups-${props.environment}-*`,
-            `arn:aws:dynamodb:${this.region}:${this.account}:table/acorn-pups-${props.environment}-*/index/*`,
+            // All Acorn Pups tables and their indexes (correct naming: acorn-pups-{tableName}-{environment})
+            `arn:aws:dynamodb:${this.region}:${this.account}:table/acorn-pups-*-${props.environment}`,
+            `arn:aws:dynamodb:${this.region}:${this.account}:table/acorn-pups-*-${props.environment}/index/*`,
             // Legacy naming patterns (if any)
             `arn:aws:dynamodb:${this.region}:${this.account}:table/AcornPups*`,
             `arn:aws:dynamodb:${this.region}:${this.account}:table/AcornPups*/index/*`,
@@ -517,14 +520,14 @@ export class LambdaFunctionsStack extends cdk.Stack {
     parameterHelper.createParameter(
       'DynamoDbLayerArn',
       dynamoDbLayer.layerVersionArn,
-      'DynamoDB Layer ARN with AWS SDK v3.844.0',
+      'DynamoDB & SSM Layer ARN with AWS SDK v3.844.0',
       `/acorn-pups/${props.environment}/lambda-functions/dynamodb-layer/arn`
     );
 
     // Create CloudFormation outputs for DynamoDB layer
     new cdk.CfnOutput(this, 'DynamoDbLayerArn', {
       value: dynamoDbLayer.layerVersionArn,
-      description: 'ARN of the DynamoDB Layer with AWS SDK v3.844.0',
+      description: 'ARN of the DynamoDB & SSM Layer with AWS SDK v3.844.0',
       exportName: `acorn-pups-${props.environment}-dynamodb-layer-arn`,
     });
 
