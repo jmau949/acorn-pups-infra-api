@@ -71,6 +71,53 @@ export class LambdaFunctionsStack extends cdk.Stack {
       description: 'DynamoDB & SSM AWS SDK v3 layer (v3.844.0) for Acorn Pups Lambda functions',
     });
 
+    // **Create IoT & UUID Layer with AWS SDK v3.844.0**
+    const iotLayer = new lambda.LayerVersion(this, 'IoTLayer', {
+      layerVersionName: `acorn-pups-${props.environment}-iot-layer`,
+      code: lambda.Code.fromAsset('.', {
+        bundling: {
+          image: lambda.Runtime.NODEJS_22_X.bundlingImage,
+          command: [
+            'bash', '-c', [
+              'set -e',
+              // Create the nodejs directory structure for the layer
+              'mkdir -p /asset-output/nodejs',
+              // Initialize a package.json for the layer
+              'echo \'{"name": "iot-layer", "version": "1.0.0"}\' > /asset-output/nodejs/package.json',
+              // Install the exact version of AWS SDK v3 IoT client and UUID
+              'cd /asset-output/nodejs',
+              'npm install @aws-sdk/client-iot@3.844.0 uuid@^10.0.0 @types/uuid@^10.0.0',
+              // Verify installation succeeded and correct version is installed
+              'ls -la node_modules/@aws-sdk/client-iot/package.json || (echo "IoT client installation failed" && exit 1)',
+              'ls -la node_modules/uuid/package.json || (echo "UUID installation failed" && exit 1)',
+              'grep -q "3.844.0" node_modules/@aws-sdk/client-iot/package.json || (echo "IoT client version mismatch" && exit 1)',
+              // Display installed versions for verification
+              'echo "Installed package versions:"',
+              'cat node_modules/@aws-sdk/client-iot/package.json | grep "version"',
+              'cat node_modules/uuid/package.json | grep "version"',
+              // Clean up package files to reduce layer size
+              'rm -rf node_modules/.cache',
+              'rm -rf node_modules/**/test',
+              'rm -rf node_modules/**/tests',
+              'rm -rf node_modules/**/*.md',
+              'rm -rf node_modules/**/*.ts',
+              'rm -rf node_modules/**/tsconfig.json',
+              'rm -rf node_modules/**/*.map',
+              'rm -rf node_modules/**/LICENSE*',
+              'rm -rf node_modules/**/CHANGELOG*',
+              'rm -rf node_modules/**/examples',
+              'rm -rf node_modules/**/docs',
+              // Debug: show what was installed
+              'ls -la /asset-output/nodejs/',
+              'ls -la /asset-output/nodejs/node_modules/@aws-sdk/',
+            ].join(' && ')
+          ],
+        },
+      }),
+      compatibleRuntimes: [lambda.Runtime.NODEJS_22_X],
+      description: 'IoT & UUID AWS SDK v3 layer (v3.844.0) for device management',
+    });
+
     // Common environment variables for all functions
     const commonEnvironment = {
       ENVIRONMENT: props.environment,
@@ -339,6 +386,12 @@ export class LambdaFunctionsStack extends cdk.Stack {
       layers: [dynamoDbLayer],
     };
 
+    // Special configuration for functions that need both DynamoDB and IoT layers
+    const iotDeviceFunctionProps = {
+      ...commonFunctionProps,
+      layers: [dynamoDbLayer, iotLayer],
+    };
+
     // Health Check Function (no auth required)
     this.functions = {
       healthCheck: new lambda.Function(this, 'HealthCheckFunction', {
@@ -351,7 +404,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
 
       // Device Management Functions
       registerDevice: new lambda.Function(this, 'RegisterDeviceFunction', {
-        ...dynamoDbFunctionProps,
+        ...iotDeviceFunctionProps,
         functionName: `acorn-pups-${props.environment}-register-device`,
         code: createBundledCode('register-device'),
         handler: 'index.handler',
@@ -388,7 +441,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
       }),
 
       resetDevice: new lambda.Function(this, 'ResetDeviceFunction', {
-        ...dynamoDbFunctionProps,
+        ...iotDeviceFunctionProps,
         functionName: `acorn-pups-${props.environment}-reset-device`,
         code: createBundledCode('reset-device'),
         handler: 'index.handler',
@@ -524,11 +577,26 @@ export class LambdaFunctionsStack extends cdk.Stack {
       `/acorn-pups/${props.environment}/lambda-functions/dynamodb-layer/arn`
     );
 
+    // Create parameter for IoT layer
+    parameterHelper.createParameter(
+      'IoTLayerArn',
+      iotLayer.layerVersionArn,
+      'IoT & UUID Layer ARN with AWS SDK v3.844.0',
+      `/acorn-pups/${props.environment}/lambda-functions/iot-layer/arn`
+    );
+
     // Create CloudFormation outputs for DynamoDB layer
     new cdk.CfnOutput(this, 'DynamoDbLayerArn', {
       value: dynamoDbLayer.layerVersionArn,
       description: 'ARN of the DynamoDB & SSM Layer with AWS SDK v3.844.0',
       exportName: `acorn-pups-${props.environment}-dynamodb-layer-arn`,
+    });
+
+    // Create CloudFormation outputs for IoT layer
+    new cdk.CfnOutput(this, 'IoTLayerArn', {
+      value: iotLayer.layerVersionArn,
+      description: 'ARN of the IoT & UUID Layer with AWS SDK v3.844.0',
+      exportName: `acorn-pups-${props.environment}-iot-layer-arn`,
     });
 
     // Create CloudFormation outputs for all roles

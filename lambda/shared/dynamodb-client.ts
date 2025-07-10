@@ -1,5 +1,5 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, DeleteCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, DeleteCommand, QueryCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 
 // Initialize DynamoDB client with proper configuration
@@ -272,6 +272,75 @@ export class DynamoDBHelper {
       throw new DynamoDBError(
         `Failed to query items from ${tableParam}: ${error instanceof Error ? error.message : 'Unknown error'}`,
         'QueryItems',
+        error instanceof Error ? error : undefined
+      );
+    }
+  }
+
+  /**
+   * Execute multiple DynamoDB operations as a transaction
+   */
+  static async transactWrite(operations: Array<{
+    action: 'Put' | 'Update' | 'Delete';
+    tableParam: string;
+    item?: Record<string, any>;
+    key?: Record<string, any>;
+    updateExpression?: string;
+    expressionAttributeValues?: Record<string, any>;
+    expressionAttributeNames?: Record<string, string>;
+    conditionExpression?: string;
+  }>) {
+    try {
+      const transactItems = [];
+      
+      for (const op of operations) {
+        const tableName = await this.getTableName(op.tableParam);
+        
+        if (op.action === 'Put' && op.item) {
+          transactItems.push({
+            Put: {
+              TableName: tableName,
+              Item: op.item,
+              ...(op.conditionExpression && { ConditionExpression: op.conditionExpression }),
+              ...(op.expressionAttributeValues && { ExpressionAttributeValues: op.expressionAttributeValues }),
+              ...(op.expressionAttributeNames && { ExpressionAttributeNames: op.expressionAttributeNames }),
+            },
+          });
+        } else if (op.action === 'Update' && op.key && op.updateExpression) {
+          transactItems.push({
+            Update: {
+              TableName: tableName,
+              Key: op.key,
+              UpdateExpression: op.updateExpression,
+              ...(op.expressionAttributeValues && { ExpressionAttributeValues: op.expressionAttributeValues }),
+              ...(op.expressionAttributeNames && { ExpressionAttributeNames: op.expressionAttributeNames }),
+              ...(op.conditionExpression && { ConditionExpression: op.conditionExpression }),
+            },
+          });
+        } else if (op.action === 'Delete' && op.key) {
+          transactItems.push({
+            Delete: {
+              TableName: tableName,
+              Key: op.key,
+              ...(op.conditionExpression && { ConditionExpression: op.conditionExpression }),
+              ...(op.expressionAttributeValues && { ExpressionAttributeValues: op.expressionAttributeValues }),
+              ...(op.expressionAttributeNames && { ExpressionAttributeNames: op.expressionAttributeNames }),
+            },
+          });
+        }
+      }
+      
+      this.log('TransactWrite', 'multiple-tables', { operationCount: transactItems.length });
+      
+      const command = new TransactWriteCommand({
+        TransactItems: transactItems,
+      });
+      
+      return await docClient.send(command);
+    } catch (error) {
+      throw new DynamoDBError(
+        `Failed to execute transaction: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'TransactWrite',
         error instanceof Error ? error : undefined
       );
     }
