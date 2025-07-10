@@ -28,26 +28,29 @@
     "npm": ">=10.0.0"
   },
   "devDependencies": {
+    "@aws-sdk/client-dynamodb": "3.844.0",
+    "@aws-sdk/client-iot": "^3.844.0",
+    "@aws-sdk/client-ssm": "3.844.0",
+    "@aws-sdk/lib-dynamodb": "3.844.0",
+    "@aws-sdk/util-dynamodb": "3.844.0",
     "@types/aws-lambda": "^8.10.119",
     "@types/jest": "^29.5.0",
     "@types/node": "^22.0.0",
+    "@types/uuid": "^10.0.0",
     "aws-sdk-client-mock": "^3.0.0",
     "aws-sdk-client-mock-jest": "^3.0.0",
+    "chokidar-cli": "^3.0.0",
+    "concurrently": "^8.2.0",
     "jest": "^29.5.0",
     "ts-jest": "^29.1.0",
     "typescript": "~5.0.0",
-    "concurrently": "^8.2.0",
-    "chokidar-cli": "^3.0.0",
-    "@aws-sdk/client-dynamodb": "3.844.0",
-    "@aws-sdk/lib-dynamodb": "3.844.0",
-    "@aws-sdk/util-dynamodb": "3.844.0",
-    "@aws-sdk/client-ssm": "3.844.0"
+    "uuid": "^10.0.0"
   },
   "dependencies": {
-    "aws-cdk-lib": "^2.100.0",
-    "constructs": "^10.3.0",
+    "@aws-sdk/client-cognito-identity-provider": "^3.400.0",
     "@aws-sdk/client-ssm": "^3.400.0",
-    "@aws-sdk/client-cognito-identity-provider": "^3.400.0"
+    "aws-cdk-lib": "^2.100.0",
+    "constructs": "^10.3.0"
   },
   "keywords": [
     "aws",
@@ -58,4 +61,4 @@
   ],
   "author": "Acorn Pups Team",
   "license": "MIT"
-} 
+}
