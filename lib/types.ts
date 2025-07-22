@@ -49,6 +49,7 @@ export interface LambdaFunctions {
   
   // IoT Event Processing
   handleButtonPress: lambda.Function;
+  factoryReset: lambda.Function;
 }
 
 export interface ApiErrorResponse {

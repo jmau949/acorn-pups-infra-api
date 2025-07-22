@@ -469,6 +469,16 @@ export class LambdaFunctionsStack extends cdk.Stack {
         timeout: cdk.Duration.seconds(60),
         role: notificationRole,
       }),
+
+      factoryReset: new lambda.Function(this, 'FactoryResetFunction', {
+        ...iotDeviceFunctionProps,
+        functionName: `acorn-pups-${props.environment}-factory-reset`,
+        code: createBundledCode('factory-reset'),
+        handler: 'index.handler',
+        description: 'Process device factory reset cleanup via MQTT - revoke certificates and clean database',
+        timeout: cdk.Duration.seconds(90),
+        role: iotDeviceManagementRole,
+      }),
     };
 
     // Add tags to all Lambda functions
