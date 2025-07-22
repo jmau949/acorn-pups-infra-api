@@ -202,6 +202,9 @@ async function cleanupDatabaseRecords(deviceId: string): Promise<boolean> {
     // Get all device user associations to remove
     const deviceUsers = await DynamoDBHelper.getDeviceUsers(deviceId);
     
+    // Get all pending invitations for this device
+    const deviceInvitations = await DynamoDBHelper.getDeviceInvitations(deviceId);
+    
     // Prepare transaction operations
     const transactionOperations = [];
     
@@ -227,6 +230,17 @@ async function cleanupDatabaseRecords(deviceId: string): Promise<boolean> {
         key: { PK: `DEVICE#${deviceId}`, SK: `USER#${deviceUser.user_id}` },
       });
     }
+    
+    // Remove all pending invitations for this device
+    for (const invitation of deviceInvitations) {
+      transactionOperations.push({
+        action: 'Delete' as const,
+        tableParam: 'invitations',
+        key: { PK: `INVITATION#${invitation.invitation_id}`, SK: 'METADATA' },
+      });
+    }
+    
+    console.log(`Prepared cleanup: ${deviceUsers.length} user associations, ${deviceInvitations.length} invitations`);
     
     // Execute all operations in a transaction
     await DynamoDBHelper.transactWrite(transactionOperations);
