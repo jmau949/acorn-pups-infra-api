@@ -205,18 +205,18 @@ async function cleanupDatabaseRecords(deviceId: string): Promise<boolean> {
     // Prepare transaction operations
     const transactionOperations = [];
     
-    // Mark device as inactive instead of deleting
+    // Delete device metadata record
     transactionOperations.push({
-      action: 'Update' as const,
+      action: 'Delete' as const,
       tableParam: 'devices',
       key: { PK: `DEVICE#${deviceId}`, SK: 'METADATA' },
-      updateExpression: 'SET is_active = :inactive, is_online = :offline, updated_at = :updatedAt, reset_at = :resetAt',
-      expressionAttributeValues: {
-        ':inactive': false,
-        ':offline': false,
-        ':updatedAt': new Date().toISOString(),
-        ':resetAt': new Date().toISOString(),
-      },
+    });
+    
+    // Delete device settings record
+    transactionOperations.push({
+      action: 'Delete' as const,
+      tableParam: 'devices',
+      key: { PK: `DEVICE#${deviceId}`, SK: 'SETTINGS' },
     });
     
     // Remove all device user associations
