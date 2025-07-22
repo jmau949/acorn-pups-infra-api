@@ -225,6 +225,7 @@ export class MonitoringStack extends cdk.Stack {
         title: 'IoT Event Processing Functions',
         functions: [
           props.lambdaFunctions.handleButtonPress,
+          props.lambdaFunctions.factoryReset,
         ],
       },
     ];
