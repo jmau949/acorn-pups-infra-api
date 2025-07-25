@@ -216,60 +216,57 @@ export const handler = async (
     const deviceUuid = existingDevices && existingDevices.length > 0 ? existingDevices[0].device_id : uuidv4();
     const iotThingName = `acorn-receiver-${deviceUuid}`;
 
-    // Create new AWS IoT Core managed certificate
-    console.log('Creating new IoT certificate...');
-    const createCertCommand = new CreateKeysAndCertificateCommand({
-      setAsActive: true,
-    });
-    const certResponse = await iotClient.send(createCertCommand);
+    // Create new AWS IoT Core managed certificate and IoT endpoint in parallel
+    console.log('Creating IoT certificate and fetching endpoint...');
+    const [certResponse, endpointResponse] = await Promise.all([
+      iotClient.send(new CreateKeysAndCertificateCommand({
+        setAsActive: true,
+      })),
+      iotClient.send(new DescribeEndpointCommand({
+        endpointType: 'iot:Data-ATS',
+      }))
+    ]);
 
     if (!certResponse.certificateArn || !certResponse.certificatePem || !certResponse.keyPair?.PrivateKey) {
       throw new Error('Failed to create IoT certificate');
     }
 
-    // Create/Update IoT Thing
-    console.log(`Creating/updating IoT Thing: ${iotThingName}`);
-    const createThingCommand = new CreateThingCommand({
-      thingName: iotThingName,
-      thingTypeName: `AcornPupsReceiver-${process.env.ENVIRONMENT}`,
-      attributePayload: {
-        attributes: {
-          deviceId: deviceUuid,
-          serialNumber: serialNumber,
-          macAddress: macAddress,
-          ownerId: userId,
-          deviceInstanceId: deviceInstanceId,
-        },
-      },
-    });
-    await iotClient.send(createThingCommand);
-
-    // Attach device policy to certificate
-    const policyName = `AcornPupsReceiverPolicy-${process.env.ENVIRONMENT}`;
-    console.log(`Attaching policy: ${policyName}`);
-    const attachPolicyCommand = new AttachPolicyCommand({
-      policyName: policyName,
-      target: certResponse.certificateArn,
-    });
-    await iotClient.send(attachPolicyCommand);
-
-    // Attach certificate to Thing
-    console.log('Attaching certificate to Thing...');
-    const attachThingCommand = new AttachThingPrincipalCommand({
-      thingName: iotThingName,
-      principal: certResponse.certificateArn,
-    });
-    await iotClient.send(attachThingCommand);
-
-    // Get IoT endpoint
-    const endpointCommand = new DescribeEndpointCommand({
-      endpointType: 'iot:Data-ATS',
-    });
-    const endpointResponse = await iotClient.send(endpointCommand);
-
     if (!endpointResponse.endpointAddress) {
       throw new Error('Failed to get IoT endpoint');
     }
+
+    // Create IoT Thing and attach certificate operations in parallel
+    console.log(`Creating IoT Thing and attaching certificate...`);
+    const policyName = `AcornPupsReceiverPolicy-${process.env.ENVIRONMENT}`;
+    
+    await Promise.all([
+      // Create/Update IoT Thing
+      iotClient.send(new CreateThingCommand({
+        thingName: iotThingName,
+        thingTypeName: `AcornPupsReceiver-${process.env.ENVIRONMENT}`,
+        attributePayload: {
+          attributes: {
+            deviceId: deviceUuid,
+            serialNumber: serialNumber,
+            macAddress: macAddress,
+            ownerId: userId,
+            deviceInstanceId: deviceInstanceId,
+          },
+        },
+      })),
+      // Attach device policy to certificate
+      iotClient.send(new AttachPolicyCommand({
+        policyName: policyName,
+        target: certResponse.certificateArn,
+      }))
+    ]);
+
+    // Attach certificate to Thing (must be after Thing creation)
+    console.log('Attaching certificate to Thing...');
+    await iotClient.send(new AttachThingPrincipalCommand({
+      thingName: iotThingName,
+      principal: certResponse.certificateArn,
+    }));
 
     // Prepare transaction operations with improved resilience
     const transactionOperations = [];
@@ -312,16 +309,6 @@ export const handler = async (
         tableParam: 'devices',
         key: { PK: `DEVICE#${existingDevice.device_id}`, SK: 'SETTINGS' },
       });
-      
-      // Remove old device status records (complete cleanup)
-      const oldStatusRecords = await DynamoDBHelper.getAllDeviceStatus(existingDevice.device_id);
-      for (const statusRecord of oldStatusRecords) {
-        transactionOperations.push({
-          action: 'Delete' as const,
-          tableParam: 'device-status',
-          key: { PK: `DEVICE#${existingDevice.device_id}`, SK: statusRecord.SK },
-        });
-      }
       
       console.log(`Prepared ${transactionOperations.length} cleanup operations`);
     }
@@ -542,28 +529,24 @@ async function cleanupFailedCertificate(certificateArn: string, thingName: strin
       throw new Error('Invalid certificate ARN format');
     }
     
-    // Detach policy from certificate
+    // Detach policy from certificate and detach certificate from Thing in parallel
     const policyName = `AcornPupsReceiverPolicy-${process.env.ENVIRONMENT}`;
-    try {
-      await iotClient.send(new DetachPolicyCommand({
+    await Promise.allSettled([
+      iotClient.send(new DetachPolicyCommand({
         policyName: policyName,
         target: certificateArn,
-      }));
-    } catch (error) {
-      console.warn('Failed to detach policy during cleanup:', error);
-    }
-    
-    // Detach certificate from Thing
-    try {
-      await iotClient.send(new DetachThingPrincipalCommand({
+      })).catch(error => {
+        console.warn('Failed to detach policy during cleanup:', error);
+      }),
+      iotClient.send(new DetachThingPrincipalCommand({
         thingName: thingName,
         principal: certificateArn,
-      }));
-    } catch (error) {
-      console.warn('Failed to detach certificate from Thing during cleanup:', error);
-    }
+      })).catch(error => {
+        console.warn('Failed to detach certificate from Thing during cleanup:', error);
+      })
+    ]);
     
-    // Delete the Thing
+    // Delete the Thing (after detachment operations)
     try {
       await iotClient.send(new DeleteThingCommand({
         thingName: thingName,
@@ -604,31 +587,32 @@ async function revokeOldCertificate(certificateArn: string, thingName?: string):
       throw new Error('Invalid certificate ARN format');
     }
     
-    // Detach policy from certificate
     const policyName = `AcornPupsReceiverPolicy-${process.env.ENVIRONMENT}`;
-    try {
-      await iotClient.send(new DetachPolicyCommand({
-        policyName: policyName,
-        target: certificateArn,
-      }));
-      console.log(`Detached policy ${policyName} from old certificate`);
-    } catch (error) {
-      console.warn(`Failed to detach policy (may already be detached):`, error);
-    }
     
-    // Detach certificate from Thing if Thing name is provided
+    // Detach policy and certificate from Thing in parallel (if Thing name provided)
     if (thingName) {
-      try {
-        await iotClient.send(new DetachThingPrincipalCommand({
+      await Promise.allSettled([
+        // Detach policy from certificate
+        iotClient.send(new DetachPolicyCommand({
+          policyName: policyName,
+          target: certificateArn,
+        })).then(() => {
+          console.log(`Detached policy ${policyName} from old certificate`);
+        }).catch(error => {
+          console.warn(`Failed to detach policy (may already be detached):`, error);
+        }),
+        // Detach certificate from Thing
+        iotClient.send(new DetachThingPrincipalCommand({
           thingName: thingName,
           principal: certificateArn,
-        }));
-        console.log(`Detached old certificate from Thing: ${thingName}`);
-      } catch (error) {
-        console.warn(`Failed to detach certificate from Thing (may already be detached):`, error);
-      }
+        })).then(() => {
+          console.log(`Detached old certificate from Thing: ${thingName}`);
+        }).catch(error => {
+          console.warn(`Failed to detach certificate from Thing (may already be detached):`, error);
+        })
+      ]);
       
-      // Delete the Thing
+      // Delete the Thing (after detachment operations)
       try {
         await iotClient.send(new DeleteThingCommand({
           thingName: thingName,
@@ -636,6 +620,17 @@ async function revokeOldCertificate(certificateArn: string, thingName?: string):
         console.log(`Deleted Thing: ${thingName}`);
       } catch (error) {
         console.warn(`Failed to delete Thing (may already be deleted):`, error);
+      }
+    } else {
+      // If no Thing name, just detach policy
+      try {
+        await iotClient.send(new DetachPolicyCommand({
+          policyName: policyName,
+          target: certificateArn,
+        }));
+        console.log(`Detached policy ${policyName} from old certificate`);
+      } catch (error) {
+        console.warn(`Failed to detach policy (may already be detached):`, error);
       }
     }
     

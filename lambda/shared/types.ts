@@ -96,7 +96,7 @@ export interface Invitation {
   is_expired: boolean;
 }
 
-// DeviceStatus Table Types
+// DeviceStatus Table Types (separate table, not sort key in Devices table)
 export interface DeviceStatus {
   PK: string; // DEVICE#{device_id}
   SK: string; // STATUS#{status_type}
