@@ -4,6 +4,7 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 import { IotPolicyStackProps, IOT_CLIENT_ID_PATTERN } from './types';
 import { ParameterStoreHelper } from './parameter-store-helper';
+import { IoTPolicyCleanup } from './iot-policy-cleanup-resource';
 
 export class IotPolicyStack extends cdk.Stack {
   public readonly receiverDevicePolicy: iot.CfnPolicy;
@@ -100,6 +101,13 @@ export class IotPolicyStack extends cdk.Stack {
           value: 'ESP32-Receiver'
         }
       ]
+    });
+
+    // Create automatic certificate cleanup resource
+    // This ensures certificates are detached/deleted before policy deletion
+    new IoTPolicyCleanup(this, 'PolicyCleanup', {
+      policyName: this.receiverDevicePolicy.policyName!,
+      environment: props.environment
     });
 
     // Create IAM Role for IoT Rules execution
