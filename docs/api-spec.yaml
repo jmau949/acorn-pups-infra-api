@@ -5,9 +5,9 @@ info:
     REST API for managing Acorn Pups devices and user interactions.
     
     This API provides endpoints for:
-    - Device registration and management
+    - Device registration and management with Echo/Nest-style reset security
     - User access control and invitations
-    - Device settings and reset functionality
+    - Device settings and management
     - Health monitoring
     
     ## Authentication
@@ -19,6 +19,13 @@ info:
     during the sign-up process. The API focuses on device and access management
     for existing users only.
     
+    ## Device Registration Security (Echo/Nest Pattern)
+    Device registration implements industry-standard reset security:
+    - Each factory reset generates a new device instance ID
+    - Registration requires proof of physical reset for ownership transfer
+    - Prevents remote device takeover attacks
+    - Follows Amazon Echo/Google Nest security model
+    
     ## Rate Limiting
     - Development: 100 requests/second, 200 burst
     - Production: 1000 requests/second, 2000 burst
@@ -29,6 +36,7 @@ info:
     - Push notifications sent to all authorized users
     - No persistent storage of button press events (MVP)
     - User creation handled by Cognito post-confirmation triggers
+    - Reset cleanup handled via HTTP registration API (no MQTT reset topics)
     
     ## Request Tracing
     All requests include a unique `requestId` in responses for observability.
@@ -104,13 +112,24 @@ paths:
 
   /devices/register:
     post:
-      summary: Register a new device
+      summary: Register device with Echo/Nest-style reset security
       description: |
-        Register a new ESP32 receiver device for the authenticated user. 
-        This endpoint handles only device registration 
+        Register a new ESP32 receiver device or transfer ownership after factory reset.
+        
+        This endpoint implements Echo/Nest-style reset security:
+        - For new devices: Normal registration with new device instance ID
+        - For existing devices: Requires proof of factory reset (new device instance ID + factory_reset state)
+        - Prevents remote takeover by validating physical reset occurred
+        - Automatically handles certificate revocation and ownership transfer
         
         The authenticated user (identified by JWT token) must already exist in the 
         Users table before calling this endpoint.
+        
+        **Reset Security Flow:**
+        1. Factory reset generates new deviceInstanceId
+        2. Registration includes deviceInstanceId and deviceState
+        3. Backend validates reset proof and handles ownership transfer
+        4. Old certificates revoked, new certificates issued
       tags:
         - Device Management
       parameters:
@@ -124,12 +143,15 @@ paths:
               $ref: '#/components/schemas/DeviceRegistrationRequest'
             example:
               deviceId: "acorn-receiver-001"
+              deviceInstanceId: "inst-123e4567-e89b-12d3-a456-426614174000"
               deviceName: "Living Room Receiver"
               serialNumber: "SN123456789"
               macAddress: "AA:BB:CC:DD:EE:FF"
+              deviceState: "factory_reset"
+              resetTimestamp: "2025-07-25T10:30:00Z"
       responses:
         '201':
-          description: Device registered successfully
+          description: Device registered successfully (new device or ownership transferred)
           headers:
             X-Request-ID:
               $ref: '#/components/headers/X-Request-ID'
@@ -142,10 +164,13 @@ paths:
               example:
                 data:
                   deviceId: "acorn-receiver-001"
+                  deviceInstanceId: "inst-123e4567-e89b-12d3-a456-426614174000"
                   deviceName: "Living Room Receiver"
                   serialNumber: "SN123456789"
                   ownerId: "user-123e4567-e89b-12d3-a456-426614174000"
                   registeredAt: "2024-01-15T10:30:00Z"
+                  lastResetAt: "2025-07-25T10:30:00Z"
+                  ownershipTransferred: true
                   status: "active"
                   certificates:
                     deviceCertificate: "-----BEGIN CERTIFICATE-----\nMIIBIjANBgkqhkiG9w0BAQEFA..."
@@ -168,14 +193,14 @@ paths:
                 message: "Request validation failed"
                 requestId: "req-123e4567-e89b-12d3-a456-426614174000"
                 validationErrors:
-                  - field: "deviceName"
-                    message: "Device name must be between 1 and 50 characters"
+                  - field: "deviceInstanceId"
+                    message: "Device instance ID is required"
                   - field: "macAddress"
                     message: "Invalid MAC address format"
         '401':
           $ref: '#/components/responses/Unauthorized'
         '409':
-          description: Device already exists
+          description: Device already exists without valid reset proof
           headers:
             X-Request-ID:
               $ref: '#/components/headers/X-Request-ID'
@@ -184,11 +209,16 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/DeviceConflictResponse'
               example:
-                error: "device_already_exists"
-                message: "Device with this serial number already exists"
+                error: "device_already_registered"
+                message: "Device already registered to another user. Factory reset required for ownership transfer."
                 requestId: "req-123e4567-e89b-12d3-a456-426614174000"
+                resetInstructions:
+                  - "Press and hold the reset button on the device for 5 seconds"
+                  - "Wait for the device LED to blink blue (setup mode)"
+                  - "Try registration again through the mobile app"
+                supportUrl: "https://help.acornpups.com/reset-device"
 
   /users/{userId}/devices:
     get:
@@ -223,11 +253,13 @@ paths:
                 data:
                   devices:
                     - deviceId: "acorn-receiver-001"
+                      deviceInstanceId: "inst-123e4567-e89b-12d3-a456-426614174000"
                       deviceName: "Living Room Receiver"
                       serialNumber: "SN123456789"
                       isOnline: true
                       lastSeen: "2024-01-15T10:25:00Z"
                       registeredAt: "2024-01-15T10:30:00Z"
+                      lastResetAt: "2025-07-25T10:30:00Z"
                       firmwareVersion: "1.2.3"
                       settings:
                         soundEnabled: true
@@ -320,48 +352,6 @@ paths:
                 validationErrors:
                   - field: "soundVolume"
                     message: "Volume must be between 1 and 10"
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/DeviceNotFound'
-
-  /devices/{deviceId}/reset:
-    post:
-      summary: Reset device
-      description: Initiate factory reset of an ESP32 receiver device and clean up all associated data
-      tags:
-        - Device Management
-      parameters:
-        - name: deviceId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-            example: "acorn-receiver-001"
-          description: Device ID
-        - $ref: '#/components/parameters/CorrelationId'
-        - $ref: '#/components/parameters/ClientVersion'
-      responses:
-        '200':
-          description: Device reset initiated successfully
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/X-Request-ID'
-            X-API-Version:
-              $ref: '#/components/headers/X-API-Version'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeviceResetResponse'
-              example:
-                data:
-                  deviceId: "acorn-receiver-001"
-                  message: "Device reset initiated successfully"
-                  resetInitiatedAt: "2024-01-15T10:30:00Z"
-                requestId: "req-123e4567-e89b-12d3-a456-426614174000"
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -837,14 +827,34 @@ components:
                   field:
                     type: string
                     description: Field name that failed validation
-                    example: "deviceName"
+                    example: "deviceInstanceId"
                   message:
                     type: string
                     description: Validation error message
-                    example: "Device name must be between 1 and 50 characters"
+                    example: "Device instance ID is required"
                 required:
                   - field
                   - message
+
+    DeviceConflictResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            resetInstructions:
+              type: array
+              description: Step-by-step reset instructions for user
+              items:
+                type: string
+              example:
+                - "Press and hold the reset button on the device for 5 seconds"
+                - "Wait for the device LED to blink blue (setup mode)"
+                - "Try registration again through the mobile app"
+            supportUrl:
+              type: string
+              format: uri
+              description: URL to device reset documentation
+              example: "https://help.acornpups.com/reset-device"
 
     HealthResponse:
       allOf:
@@ -901,6 +911,11 @@ components:
           pattern: '^[a-zA-Z0-9\-_]+$'
           description: Unique device identifier for ESP32 receiver
           example: "acorn-receiver-001"
+        deviceInstanceId:
+          type: string
+          format: uuid
+          description: UUID generated each factory reset cycle for security validation
+          example: "inst-123e4567-e89b-12d3-a456-426614174000"
         deviceName:
           type: string
           minLength: 1
@@ -920,11 +935,23 @@ components:
           pattern: '^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$'
           description: Device MAC address
           example: "AA:BB:CC:DD:EE:FF"
+        deviceState:
+          type: string
+          enum: [normal, factory_reset]
+          description: Device state indicating if factory reset occurred
+          example: "factory_reset"
+        resetTimestamp:
+          type: string
+          format: date-time
+          description: Timestamp when factory reset occurred (ISO 8601 format)
+          example: "2025-07-25T10:30:00Z"
       required:
         - deviceId
+        - deviceInstanceId
         - deviceName
         - serialNumber
         - macAddress
+        - deviceState
 
     DeviceRegistrationResponse:
       allOf:
@@ -937,6 +964,10 @@ components:
                 deviceId:
                   type: string
                   example: "acorn-receiver-001"
+                deviceInstanceId:
+                  type: string
+                  format: uuid
+                  example: "inst-123e4567-e89b-12d3-a456-426614174000"
                 deviceName:
                   type: string
                   example: "Living Room Receiver"
@@ -951,6 +982,15 @@ components:
                   type: string
                   format: date-time
                   example: "2024-01-15T10:30:00Z"
+                lastResetAt:
+                  type: string
+                  format: date-time
+                  description: Timestamp of last factory reset
+                  example: "2025-07-25T10:30:00Z"
+                ownershipTransferred:
+                  type: boolean
+                  description: Whether ownership was transferred from previous owner
+                  example: true
                 status:
                   type: string
                   enum: [pending, active]
@@ -976,10 +1016,12 @@ components:
                     - iotEndpoint
               required:
                 - deviceId
+                - deviceInstanceId
                 - deviceName
                 - serialNumber
                 - ownerId
                 - registeredAt
+                - ownershipTransferred
                 - status
                 - certificates
 
@@ -989,6 +1031,11 @@ components:
         deviceId:
           type: string
           example: "acorn-receiver-001"
+        deviceInstanceId:
+          type: string
+          format: uuid
+          description: Current device instance ID (changes on factory reset)
+          example: "inst-123e4567-e89b-12d3-a456-426614174000"
         deviceName:
           type: string
           example: "Living Room Receiver"
@@ -1006,6 +1053,11 @@ components:
           type: string
           format: date-time
           example: "2024-01-15T10:30:00Z"
+        lastResetAt:
+          type: string
+          format: date-time
+          description: Timestamp of last factory reset
+          example: "2025-07-25T10:30:00Z"
         firmwareVersion:
           type: string
           example: "1.2.3"
@@ -1025,6 +1077,7 @@ components:
             - settings
       required:
         - deviceId
+        - deviceInstanceId
         - deviceName
         - serialNumber
         - isOnline
@@ -1139,29 +1192,6 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/DeviceSettings'
-
-    DeviceResetResponse:
-      allOf:
-        - $ref: '#/components/schemas/SuccessResponse'
-        - type: object
-          properties:
-            data:
-              type: object
-              properties:
-                deviceId:
-                  type: string
-                  example: "acorn-receiver-001"
-                message:
-                  type: string
-                  example: "Device reset initiated successfully"
-                resetInitiatedAt:
-                  type: string
-                  format: date-time
-                  example: "2024-01-15T10:30:00Z"
-              required:
-                - deviceId
-                - message
-                - resetInitiatedAt
 
     UserInviteRequest:
       type: object
@@ -1331,8 +1361,4 @@ components:
 
 tags:
   - name: System
-    description: System health and status endpoints
-  - name: Device Management
-    description: ESP32 receiver registration, settings, and reset functionality
-  - name: User Management
-    description: User access control, invitations, and device sharing 
+    description: System health
