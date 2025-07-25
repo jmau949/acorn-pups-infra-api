@@ -1,38 +1,50 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import ResponseHandler from '../shared/response-handler';
+import { DynamoDBHelper } from '../shared/dynamodb-client';
+import { DeviceMetadata, DeviceSettings, DeviceUser } from '../shared/types';
 
-interface DeviceSettings {
+// ==== User Devices Types (specific to this lambda) ====
+
+interface DeviceSettingsResponse {
   soundEnabled: boolean;
   soundVolume: number;
   ledBrightness: number;
   notificationCooldown: number;
   quietHoursEnabled: boolean;
-  quietHoursStart?: string;
-  quietHoursEnd?: string;
+  quietHoursStart: string;
+  quietHoursEnd: string;
 }
 
-interface DevicePermissions {
-  notifications: boolean;
-  settings: boolean;
-}
-
-interface Device {
+interface UserDevice {
   deviceId: string;
+  deviceInstanceId: string;
   deviceName: string;
   serialNumber: string;
   isOnline: boolean;
   lastSeen: string;
   registeredAt: string;
+  lastResetAt?: string;
   firmwareVersion: string;
-  settings: DeviceSettings;
-  permissions: DevicePermissions;
+  settings: DeviceSettingsResponse;
+  permissions: {
+    notifications: boolean;
+    settings: boolean;
+  };
 }
 
 interface UserDevicesResponse {
-  devices: Device[];
+  devices: UserDevice[];
   total: number;
 }
 
+/**
+ * Get User's Devices
+ * 
+ * Retrieves all devices accessible by the specified user, including:
+ * - Device metadata with new device_instance_id field
+ * - Device settings and user permissions
+ * - Online status and firmware information
+ */
 export const handler = async (
   event: APIGatewayProxyEvent,
   context: Context
@@ -48,62 +60,111 @@ export const handler = async (
       return ResponseHandler.badRequest('userId path parameter is required', requestId);
     }
 
-    // TODO: Validate userId format (UUID)
-    // TODO: Verify user has permission to access these devices (from JWT token)
-    // TODO: Query DynamoDB to get user's devices
+    // Validate UUID format
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidPattern.test(userId)) {
+      return ResponseHandler.badRequest('Invalid userId format', requestId);
+    }
 
-    // Mock response for now
-    const mockDevices: Device[] = [
-      {
-        deviceId: 'acorn-receiver-001',
-        deviceName: 'Living Room Receiver',
-        serialNumber: 'SN123456789',
-        isOnline: true,
-        lastSeen: new Date(Date.now() - 5 * 60 * 1000).toISOString(), // 5 minutes ago
-        registeredAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // 1 day ago
-        firmwareVersion: '1.2.3',
-        settings: {
-          soundEnabled: true,
-          soundVolume: 7,
-          ledBrightness: 5,
-          notificationCooldown: 30,
-          quietHoursEnabled: true,
-          quietHoursStart: '22:00',
-          quietHoursEnd: '07:00',
-        },
-        permissions: {
-          notifications: true,
-          settings: true,
-        },
-      },
-      {
-        deviceId: 'acorn-receiver-002',
-        deviceName: 'Kitchen Receiver',
-        serialNumber: 'SN987654321',
-        isOnline: false,
-        lastSeen: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
-        registeredAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), // 1 week ago
-        firmwareVersion: '1.1.8',
-        settings: {
-          soundEnabled: true,
-          soundVolume: 5,
-          ledBrightness: 3,
-          notificationCooldown: 60,
-          quietHoursEnabled: false,
-        },
-        permissions: {
-          notifications: true,
-          settings: false, // User has limited permissions for this device
-        },
-      },
-    ];
+    // Get cognito_sub from JWT token for authorization
+    const cognitoSub = event.requestContext.authorizer?.claims?.sub;
+    if (!cognitoSub) {
+      return ResponseHandler.unauthorized('Valid JWT token required', requestId);
+    }
+
+    // Look up the requesting user to verify they exist
+    const requestingUsers = await DynamoDBHelper.getUserByCognitoSub(cognitoSub);
+    if (!requestingUsers || requestingUsers.length === 0) {
+      return ResponseHandler.unauthorized('Requesting user not found', requestId);
+    }
+
+    const requestingUser = requestingUsers[0];
+
+    // Verify the requesting user has permission to access this user's devices
+    // For now, users can only access their own devices
+    if (requestingUser.user_id !== userId) {
+      return ResponseHandler.forbidden('You can only access your own devices', requestId);
+    }
+
+    console.log(`Getting devices for user: ${userId}`);
+
+    // Get all device-user relationships for this user
+    const deviceUserRelationships = await DynamoDBHelper.getUserDevices(userId);
+    
+    if (!deviceUserRelationships || deviceUserRelationships.length === 0) {
+      console.log(`No devices found for user: ${userId}`);
+      const emptyResponse: UserDevicesResponse = {
+        devices: [],
+        total: 0,
+      };
+      return ResponseHandler.success(emptyResponse, requestId);
+    }
+
+    console.log(`Found ${deviceUserRelationships.length} device relationships for user: ${userId}`);
+
+    // Fetch device details for each device the user has access to
+    const devices: UserDevice[] = [];
+    
+    for (const deviceUser of deviceUserRelationships as DeviceUser[]) {
+      try {
+        // Skip inactive relationships
+        if (!deviceUser.is_active) {
+          continue;
+        }
+
+        // Get device metadata
+        const deviceMetadata = await DynamoDBHelper.getDeviceMetadata(deviceUser.device_id) as DeviceMetadata | undefined;
+        if (!deviceMetadata) {
+          console.warn(`Device metadata not found for device: ${deviceUser.device_id}`);
+          continue;
+        }
+
+        // Get device settings
+        const deviceSettings = await DynamoDBHelper.getDeviceSettings(deviceUser.device_id) as DeviceSettings | undefined;
+        if (!deviceSettings) {
+          console.warn(`Device settings not found for device: ${deviceUser.device_id}`);
+          continue;
+        }
+
+        // Build the user device response
+        const userDevice: UserDevice = {
+          deviceId: deviceMetadata.device_id,
+          deviceInstanceId: deviceMetadata.device_instance_id, // Include instance ID
+          deviceName: deviceUser.device_nickname || deviceMetadata.device_name,
+          serialNumber: deviceMetadata.serial_number,
+          isOnline: deviceMetadata.is_online,
+          lastSeen: deviceMetadata.last_seen,
+          registeredAt: deviceMetadata.created_at,
+          lastResetAt: deviceMetadata.last_reset_at, // Include last reset timestamp
+          firmwareVersion: deviceMetadata.firmware_version,
+          settings: {
+            soundEnabled: deviceSettings.sound_enabled,
+            soundVolume: deviceSettings.sound_volume,
+            ledBrightness: deviceSettings.led_brightness,
+            notificationCooldown: deviceSettings.notification_cooldown,
+            quietHoursEnabled: deviceSettings.quiet_hours_enabled,
+            quietHoursStart: deviceSettings.quiet_hours_start,
+            quietHoursEnd: deviceSettings.quiet_hours_end,
+          },
+          permissions: {
+            notifications: deviceUser.notifications_permission,
+            settings: deviceUser.settings_permission,
+          },
+        };
+
+        devices.push(userDevice);
+      } catch (error) {
+        console.error(`Error processing device ${deviceUser.device_id}:`, error);
+        // Continue processing other devices
+      }
+    }
 
     const userDevicesResponse: UserDevicesResponse = {
-      devices: mockDevices,
-      total: mockDevices.length,
+      devices: devices,
+      total: devices.length,
     };
 
-    console.log(`Retrieved ${mockDevices.length} devices for user: ${userId}`);
+    console.log(`Retrieved ${devices.length} devices for user: ${userId}`);
 
     const response = ResponseHandler.success(userDevicesResponse, requestId);
     ResponseHandler.logResponse(response, requestId);
@@ -111,6 +172,11 @@ export const handler = async (
     return response;
   } catch (error) {
     console.error('Failed to get user devices:', error);
+    
+    // Handle specific error types
+    if (error instanceof Error && error.message.includes('User not found')) {
+      return ResponseHandler.notFound('User not found', requestId);
+    }
     
     const response = ResponseHandler.internalError(
       'Failed to retrieve user devices',

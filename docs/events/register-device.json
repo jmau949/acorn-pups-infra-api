@@ -3,7 +3,8 @@
   "path": "/devices/register",
   "httpMethod": "POST",
   "headers": {
-    "Content-Type": "application/json"
+    "Content-Type": "application/json",
+    "Authorization": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
   },
   "multiValueHeaders": {},
   "queryStringParameters": null,
@@ -15,8 +16,14 @@
     "httpMethod": "POST",
     "path": "/devices/register",
     "requestTime": "28/Jun/2025:12:00:00 +0000",
-    "requestId": "sample-request-id"
+    "requestId": "sample-request-id",
+    "authorizer": {
+      "claims": {
+        "sub": "abc123def456",
+        "email": "user@example.com"
+      }
+    }
   },
-  "body": "{\"deviceId\":\"device-123\",\"deviceName\":\"Buddy Button\",\"deviceType\":\"acorn-button-v1\",\"userId\":\"user-001\"}",
+  "body": "{\"deviceId\":\"acorn-receiver-001\",\"deviceInstanceId\":\"inst-123e4567-e89b-12d3-a456-426614174000\",\"deviceName\":\"Living Room Receiver\",\"serialNumber\":\"SN123456789\",\"macAddress\":\"AA:BB:CC:DD:EE:FF\",\"deviceState\":\"factory_reset\",\"resetTimestamp\":\"2025-06-28T12:00:00Z\"}",
   "isBase64Encoded": false
 } 

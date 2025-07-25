@@ -8,7 +8,7 @@ This document details the comprehensive IAM permissions structure for the Acorn 
 
 ### 1. **IoT Device Management Policy**
 **Purpose**: Certificate and Thing lifecycle management  
-**Used by**: `register-device`, `reset-device`
+**Used by**: `register-device` (with Echo/Nest reset security)
 
 **Permissions**:
 ```typescript
@@ -169,8 +169,7 @@ This document details the comprehensive IAM permissions structure for the Acorn 
 
 ### 2. **IoTDeviceManagementRole**
 **Functions**:
-- `register-device`
-- `reset-device`
+- `register-device` (with Echo/Nest reset security)
 
 **Policies**:
 - AWS Managed: `AWSLambdaBasicExecutionRole`

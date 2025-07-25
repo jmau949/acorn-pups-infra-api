@@ -1,16 +1,20 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
-import { IoTClient, CreateKeysAndCertificateCommand, CreateThingCommand, AttachPolicyCommand, AttachThingPrincipalCommand, DescribeEndpointCommand } from '@aws-sdk/client-iot';
+import { IoTClient, CreateKeysAndCertificateCommand, CreateThingCommand, AttachPolicyCommand, AttachThingPrincipalCommand, DescribeEndpointCommand, UpdateCertificateCommand, DeleteCertificateCommand, DetachPolicyCommand, DetachThingPrincipalCommand, DeleteThingCommand } from '@aws-sdk/client-iot';
 import { v4 as uuidv4 } from 'uuid';
 import ResponseHandler from '../shared/response-handler';
 import { DynamoDBHelper } from '../shared/dynamodb-client';
+import { DeviceMetadata, DeviceSettings, DeviceUser, ValidationError, ApiErrorResponse } from '../shared/types';
 
 // ==== Device Registration Types (specific to this lambda) ====
 
 interface DeviceRegistrationRequest {
   deviceId: string;
+  deviceInstanceId: string; // UUID generated each factory reset cycle
   deviceName: string;
   serialNumber: string;
   macAddress: string;
+  deviceState: 'normal' | 'factory_reset'; // Indicates if reset occurred
+  resetTimestamp?: string; // When factory reset occurred
 }
 
 interface DeviceCertificates {
@@ -21,12 +25,21 @@ interface DeviceCertificates {
 
 interface DeviceRegistrationResponse {
   deviceId: string;
+  deviceInstanceId: string;
   deviceName: string;
   serialNumber: string;
   ownerId: string;
   registeredAt: string;
+  lastResetAt?: string; // Last factory reset timestamp
+  ownershipTransferred: boolean; // Whether ownership was transferred
   status: 'pending' | 'active';
   certificates: DeviceCertificates;
+}
+
+// Device Conflict Response (for reset security)
+interface DeviceConflictResponse extends ApiErrorResponse {
+  resetInstructions: string[];
+  supportUrl: string;
 }
 
 // Initialize IoT client
@@ -34,6 +47,15 @@ const iotClient = new IoTClient({
   region: process.env.REGION || 'us-east-1',
 });
 
+/**
+ * Device Registration with Echo/Nest-Style Reset Security
+ * 
+ * Implements industry-standard reset security pattern:
+ * - For new devices: Normal registration with device instance ID
+ * - For existing devices: Requires proof of factory reset (new device instance ID + factory_reset state)
+ * - Prevents remote takeover by validating physical reset occurred
+ * - Automatically handles certificate revocation and ownership transfer
+ */
 export const handler = async (
   event: APIGatewayProxyEvent,
   context: Context
@@ -49,39 +71,59 @@ export const handler = async (
       return ResponseHandler.badRequest('Request body is required', requestId);
     }
 
-    const { deviceId, deviceName, serialNumber, macAddress } = body;
+    const { deviceId, deviceInstanceId, deviceName, serialNumber, macAddress, deviceState, resetTimestamp } = body;
 
     // Validate required fields
-    if (!deviceId || !deviceName || !serialNumber || !macAddress) {
-      return ResponseHandler.badRequest(
-        'Missing required fields: deviceId, deviceName, serialNumber, macAddress',
-        requestId
-      );
+    const validationErrors: ValidationError[] = [];
+    
+    if (!deviceId) validationErrors.push({ field: 'deviceId', message: 'Device ID is required' });
+    if (!deviceInstanceId) validationErrors.push({ field: 'deviceInstanceId', message: 'Device instance ID is required' });
+    if (!deviceName) validationErrors.push({ field: 'deviceName', message: 'Device name is required' });
+    if (!serialNumber) validationErrors.push({ field: 'serialNumber', message: 'Serial number is required' });
+    if (!macAddress) validationErrors.push({ field: 'macAddress', message: 'MAC address is required' });
+    if (!deviceState) validationErrors.push({ field: 'deviceState', message: 'Device state is required' });
+    
+    if (validationErrors.length > 0) {
+      return ResponseHandler.validationError('Request validation failed', validationErrors, requestId);
     }
 
-    // Basic validation patterns - loosened to avoid false rejections
-    const deviceIdPattern = /^[a-zA-Z0-9_.@#+-]+$/; // Allow common special characters
-    const deviceNamePattern = /^[\p{L}\p{N}\p{P}\p{Z}]+$/u; // Allow Unicode letters, numbers, punctuation, and spaces
-    // Permissive serial number pattern - allows alphanumeric and common special chars
+    // Validate field formats
+    const deviceIdPattern = /^[a-zA-Z0-9\-_\.@#+]+$/;
+    const deviceNamePattern = /^[\p{L}\p{N}\p{P}\p{Z}]+$/u;
     const serialNumberPattern = /^[\w\-.@#+&(){}[\]/\\|*%$!~`'"<>?=^]+$/;
-    // More flexible MAC address pattern - accepts various separators and formats
     const macAddressPattern = /^([0-9A-Fa-f]{2}[:.\-]?){5}[0-9A-Fa-f]{2}$|^[0-9A-Fa-f]{12}$/;
-
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
     if (!deviceIdPattern.test(deviceId)) {
-      return ResponseHandler.badRequest('deviceId contains invalid characters', requestId);
+      validationErrors.push({ field: 'deviceId', message: 'Device ID contains invalid characters' });
+    }
+    
+    if (!uuidPattern.test(deviceInstanceId)) {
+      validationErrors.push({ field: 'deviceInstanceId', message: 'Device instance ID must be a valid UUID' });
     }
 
     if (deviceName.length < 1 || deviceName.length > 100 || !deviceNamePattern.test(deviceName)) {
-      return ResponseHandler.badRequest('deviceName format is invalid or too long (max 100 characters)', requestId);
+      validationErrors.push({ field: 'deviceName', message: 'Device name format is invalid or too long (max 100 characters)' });
     }
 
     if (serialNumber.length < 1 || serialNumber.length > 100 || !serialNumberPattern.test(serialNumber)) {
-      return ResponseHandler.badRequest('serialNumber format is invalid or too long (max 100 characters)', requestId);
+      validationErrors.push({ field: 'serialNumber', message: 'Serial number format is invalid or too long (max 100 characters)' });
     }
 
     if (!macAddressPattern.test(macAddress)) {
-      return ResponseHandler.badRequest('macAddress format is invalid', requestId);
+      validationErrors.push({ field: 'macAddress', message: 'MAC address format is invalid' });
+    }
+    
+    if (!['normal', 'factory_reset'].includes(deviceState)) {
+      validationErrors.push({ field: 'deviceState', message: 'Device state must be "normal" or "factory_reset"' });
+    }
+    
+    if (deviceState === 'factory_reset' && !resetTimestamp) {
+      validationErrors.push({ field: 'resetTimestamp', message: 'Reset timestamp is required when device state is "factory_reset"' });
+    }
+
+    if (validationErrors.length > 0) {
+      return ResponseHandler.validationError('Request validation failed', validationErrors, requestId);
     }
 
     // Get cognito_sub from JWT token
@@ -102,16 +144,84 @@ export const handler = async (
 
     // Check if device with this serial number already exists
     const existingDevices = await DynamoDBHelper.getDeviceBySerial(serialNumber);
+    
     if (existingDevices && existingDevices.length > 0) {
-      return ResponseHandler.conflict('Device with this serial number already exists', requestId);
+      const existingDevice = existingDevices[0] as DeviceMetadata;
+      
+      console.log(`Found existing device with serial ${serialNumber}:`, existingDevice);
+      
+      // Echo/Nest Reset Security Pattern Implementation
+      if (deviceState === 'factory_reset' && existingDevice.device_instance_id !== deviceInstanceId) {
+        // Valid reset detected - different instance ID proves physical reset occurred
+        console.log(`Valid factory reset detected for device ${serialNumber} - proceeding with ownership transfer`);
+        
+        // This will be handled in the ownership transfer flow below
+      } else if (existingDevice.device_instance_id === deviceInstanceId) {
+        // Same instance ID - no reset occurred, this is likely an unauthorized registration attempt
+        console.log(`Registration rejected: same device instance ID indicates no reset occurred`);
+        
+        return ResponseHandler.createResponse(409, undefined, 'device_already_registered', 
+          'Device already registered to another user. Factory reset required for ownership transfer.', 
+          requestId) as APIGatewayProxyResult;
+      } else if (deviceState === 'normal') {
+        // Device exists but no reset state provided
+        console.log(`Registration rejected: device exists but no reset proof provided`);
+        
+        const conflictResponse: DeviceConflictResponse = {
+          error: 'device_already_registered',
+          message: 'Device already registered to another user. Factory reset required for ownership transfer.',
+          requestId,
+          resetInstructions: [
+            'Press and hold the reset button on the device for 5 seconds',
+            'Wait for the device LED to blink blue (setup mode)',
+            'Try registration again through the mobile app'
+          ],
+          supportUrl: 'https://help.acornpups.com/reset-device'
+        };
+        
+        return {
+          statusCode: 409,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Request-ID': requestId,
+            'X-API-Version': '1.0',
+            'Access-Control-Allow-Origin': '*',
+          },
+          body: JSON.stringify(conflictResponse),
+        };
+      }
     }
 
-    // Generate unique device UUID
-    const deviceUuid = uuidv4();
+    const now = new Date().toISOString();
+    let ownershipTransferred = false;
+
+    // Handle ownership transfer if this is a valid reset
+    if (existingDevices && existingDevices.length > 0 && deviceState === 'factory_reset') {
+      const existingDevice = existingDevices[0] as DeviceMetadata;
+      ownershipTransferred = true;
+      
+      console.log(`Processing ownership transfer for device: ${existingDevice.device_id}`);
+      
+      // Step 1: Revoke old certificates
+      if (existingDevice.iot_certificate_arn) {
+        await revokeOldCertificate(existingDevice.iot_certificate_arn, existingDevice.iot_thing_name);
+      }
+      
+      // Step 2: Remove all existing user associations
+      const oldDeviceUsers = await DynamoDBHelper.getDeviceUsers(existingDevice.device_id);
+      console.log(`Removing ${oldDeviceUsers.length} existing user associations`);
+      
+      // Step 3: Remove all pending invitations
+      const oldInvitations = await DynamoDBHelper.getDeviceInvitations(existingDevice.device_id);
+      console.log(`Removing ${oldInvitations.length} pending invitations`);
+    }
+
+    // Generate device UUID (use existing device_id if transferring ownership)
+    const deviceUuid = existingDevices && existingDevices.length > 0 ? existingDevices[0].device_id : uuidv4();
     const iotThingName = `acorn-receiver-${deviceUuid}`;
 
-    // Create AWS IoT Core managed certificate
-    console.log('Creating IoT certificate...');
+    // Create new AWS IoT Core managed certificate
+    console.log('Creating new IoT certificate...');
     const createCertCommand = new CreateKeysAndCertificateCommand({
       setAsActive: true,
     });
@@ -121,8 +231,8 @@ export const handler = async (
       throw new Error('Failed to create IoT certificate');
     }
 
-    // Create IoT Thing
-    console.log(`Creating IoT Thing: ${iotThingName}`);
+    // Create/Update IoT Thing
+    console.log(`Creating/updating IoT Thing: ${iotThingName}`);
     const createThingCommand = new CreateThingCommand({
       thingName: iotThingName,
       thingTypeName: `AcornPupsReceiver-${process.env.ENVIRONMENT}`,
@@ -132,6 +242,7 @@ export const handler = async (
           serialNumber: serialNumber,
           macAddress: macAddress,
           ownerId: userId,
+          deviceInstanceId: deviceInstanceId,
         },
       },
     });
@@ -164,89 +275,121 @@ export const handler = async (
       throw new Error('Failed to get IoT endpoint');
     }
 
-    const now = new Date().toISOString();
+    // Prepare transaction operations
+    const transactionOperations = [];
+    
+    // If transferring ownership, clean up old associations first
+    if (ownershipTransferred && existingDevices && existingDevices.length > 0) {
+      const existingDevice = existingDevices[0] as DeviceMetadata;
+      
+      // Remove old device users
+      const oldDeviceUsers = await DynamoDBHelper.getDeviceUsers(existingDevice.device_id);
+      for (const deviceUser of oldDeviceUsers) {
+        transactionOperations.push({
+          action: 'Delete' as const,
+          tableParam: 'device-users',
+          key: { PK: `DEVICE#${existingDevice.device_id}`, SK: `USER#${deviceUser.user_id}` },
+        });
+      }
+      
+      // Remove old invitations
+      const oldInvitations = await DynamoDBHelper.getDeviceInvitations(existingDevice.device_id);
+      for (const invitation of oldInvitations) {
+        transactionOperations.push({
+          action: 'Delete' as const,
+          tableParam: 'invitations',
+          key: { PK: `INVITATION#${invitation.invitation_id}`, SK: 'METADATA' },
+        });
+      }
+    }
 
-    // Use transaction to ensure atomicity of DynamoDB operations
-    console.log('Creating database records atomically...');
-    await DynamoDBHelper.transactWrite([
-      // Device metadata record
-      {
-        action: 'Put',
-        tableParam: 'devices',
-        item: {
-          PK: `DEVICE#${deviceUuid}`,
-          SK: 'METADATA',
-          device_id: deviceUuid,
-          serial_number: serialNumber,
-          mac_address: macAddress,
-          device_name: deviceName,
-          owner_user_id: userId,
-          firmware_version: '1.0.0',
-          hardware_version: '1.0',
-          is_online: false,
-          last_seen: now,
-          wifi_ssid: '',
-          signal_strength: 0,
-          created_at: now,
-          updated_at: now,
-          is_active: true,
-          iot_thing_name: iotThingName,
-          iot_certificate_arn: certResponse.certificateArn,
-        },
-        // Note: Serial number uniqueness is enforced by the pre-check using GSI
+    // Device metadata record (create or update)
+    transactionOperations.push({
+      action: 'Put' as const,
+      tableParam: 'devices',
+      item: {
+        PK: `DEVICE#${deviceUuid}`,
+        SK: 'METADATA',
+        device_id: deviceUuid,
+        device_instance_id: deviceInstanceId, // Store instance ID for reset security
+        serial_number: serialNumber,
+        mac_address: macAddress,
+        device_name: deviceName,
+        owner_user_id: userId,
+        firmware_version: '1.0.0',
+        hardware_version: '1.0',
+        is_online: false,
+        last_seen: now,
+        wifi_ssid: '',
+        signal_strength: 0,
+        created_at: ownershipTransferred ? existingDevices![0].created_at : now,
+        updated_at: now,
+        last_reset_at: deviceState === 'factory_reset' ? resetTimestamp : undefined, // Track reset timestamp
+        is_active: true,
+        iot_thing_name: iotThingName,
+        iot_certificate_arn: certResponse.certificateArn,
       },
-      // Device settings record
-      {
-        action: 'Put',
-        tableParam: 'devices',
-        item: {
-          PK: `DEVICE#${deviceUuid}`,
-          SK: 'SETTINGS',
-          device_id: deviceUuid,
-          sound_enabled: true,
-          sound_volume: 7,
-          led_brightness: 5,
-          notification_cooldown: 30,
-          quiet_hours_enabled: false,
-          quiet_hours_start: '22:00',
-          quiet_hours_end: '07:00',
-          updated_at: now,
-        },
+    });
+
+    // Device settings record (create or update)
+    transactionOperations.push({
+      action: 'Put' as const,
+      tableParam: 'devices',
+      item: {
+        PK: `DEVICE#${deviceUuid}`,
+        SK: 'SETTINGS',
+        device_id: deviceUuid,
+        sound_enabled: true,
+        sound_volume: 7,
+        led_brightness: 5,
+        notification_cooldown: 30,
+        quiet_hours_enabled: false,
+        quiet_hours_start: '22:00',
+        quiet_hours_end: '07:00',
+        updated_at: now,
       },
-      // Device-user relationship (owner)
-      {
-        action: 'Put',
-        tableParam: 'device-users',
-        item: {
-          PK: `DEVICE#${deviceUuid}`,
-          SK: `USER#${userId}`,
-          device_id: deviceUuid,
-          user_id: userId,
-          notifications_permission: true,
-          settings_permission: true,
-          notifications_enabled: true,
-          notification_sound: 'default',
-          notification_vibration: true,
-          quiet_hours_enabled: false,
-          quiet_hours_start: '22:00',
-          quiet_hours_end: '07:00',
-          custom_notification_sound: '',
-          device_nickname: deviceName,
-          invited_by: userId, // Owner invited themselves
-          invited_at: now,
-          accepted_at: now,
-          is_active: true,
-        },
+    });
+
+    // Device-user relationship (new owner)
+    transactionOperations.push({
+      action: 'Put' as const,
+      tableParam: 'device-users',
+      item: {
+        PK: `DEVICE#${deviceUuid}`,
+        SK: `USER#${userId}`,
+        device_id: deviceUuid,
+        user_id: userId,
+        notifications_permission: true,
+        settings_permission: true,
+        notifications_enabled: true,
+        notification_sound: 'default',
+        notification_vibration: true,
+        quiet_hours_enabled: false,
+        quiet_hours_start: '22:00',
+        quiet_hours_end: '07:00',
+        custom_notification_sound: '',
+        device_nickname: deviceName,
+        invited_by: userId, // Owner invited themselves
+        invited_at: now,
+        accepted_at: now,
+        is_active: true,
       },
-    ]);
+    });
+
+    // Execute all operations atomically
+    console.log('Executing database operations atomically...');
+    await DynamoDBHelper.transactWrite(transactionOperations);
 
     // Prepare response
     const registrationResponse: DeviceRegistrationResponse = {
       deviceId: deviceUuid,
+      deviceInstanceId: deviceInstanceId,
       deviceName: deviceName,
       serialNumber: serialNumber,
       ownerId: userId,
       registeredAt: now,
+      lastResetAt: deviceState === 'factory_reset' ? resetTimestamp : undefined,
+      ownershipTransferred: ownershipTransferred,
       status: 'active',
       certificates: {
         deviceCertificate: certResponse.certificatePem,
@@ -255,7 +398,7 @@ export const handler = async (
       },
     };
 
-    console.log(`Device registered successfully: ${deviceUuid} for user: ${userId}`);
+    console.log(`Device registered successfully: ${deviceUuid} for user: ${userId} (ownership transferred: ${ownershipTransferred})`);
 
     const response = ResponseHandler.success(registrationResponse, requestId, 201);
     ResponseHandler.logResponse(response, requestId);
@@ -272,9 +415,6 @@ export const handler = async (
       if (error.message.includes('User not found')) {
         statusCode = 401;
         errorMessage = 'User authentication failed';
-      } else if (error.message.includes('already exists') || error.message.includes('ConditionalCheckFailedException')) {
-        statusCode = 409;
-        errorMessage = 'Device with this serial number already exists';
       } else if (error.message.includes('validation') || error.message.includes('invalid')) {
         statusCode = 400;
         errorMessage = error.message;
@@ -289,4 +429,62 @@ export const handler = async (
     
     return response;
   }
-}; 
+};
+
+/**
+ * Revoke old IoT certificate and clean up IoT resources
+ */
+async function revokeOldCertificate(certificateArn: string, thingName?: string): Promise<void> {
+  try {
+    console.log(`Revoking old certificate: ${certificateArn}`);
+    
+    // Extract certificate ID from ARN
+    const certificateId = certificateArn.split('/').pop();
+    if (!certificateId) {
+      throw new Error('Invalid certificate ARN format');
+    }
+    
+    // Detach policy from certificate
+    const policyName = `AcornPupsReceiverPolicy-${process.env.ENVIRONMENT}`;
+    try {
+      await iotClient.send(new DetachPolicyCommand({
+        policyName: policyName,
+        target: certificateArn,
+      }));
+      console.log(`Detached policy ${policyName} from old certificate`);
+    } catch (error) {
+      console.warn(`Failed to detach policy (may already be detached):`, error);
+    }
+    
+    // Detach certificate from Thing if Thing name is provided
+    if (thingName) {
+      try {
+        await iotClient.send(new DetachThingPrincipalCommand({
+          thingName: thingName,
+          principal: certificateArn,
+        }));
+        console.log(`Detached old certificate from Thing: ${thingName}`);
+      } catch (error) {
+        console.warn(`Failed to detach certificate from Thing (may already be detached):`, error);
+      }
+    }
+    
+    // Mark certificate as INACTIVE first
+    await iotClient.send(new UpdateCertificateCommand({
+      certificateId: certificateId,
+      newStatus: 'INACTIVE',
+    }));
+    console.log(`Marked old certificate as INACTIVE: ${certificateId}`);
+    
+    // Delete the certificate (this also revokes it)
+    await iotClient.send(new DeleteCertificateCommand({
+      certificateId: certificateId,
+      forceDelete: true, // Force delete even if attached to other resources
+    }));
+    console.log(`Deleted old certificate: ${certificateId}`);
+    
+  } catch (error) {
+    console.error('Failed to revoke old certificate:', error);
+    // Don't throw - we want registration to continue even if old cert cleanup fails
+  }
+} 

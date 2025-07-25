@@ -1,7 +1,9 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import ResponseHandler from '../shared/response-handler';
 
-interface HealthCheckResponse {
+// ==== Health Check Types (specific to this lambda) ====
+
+interface HealthResponse {
   status: 'healthy' | 'unhealthy';
   timestamp: string;
   environment: string;
@@ -24,7 +26,7 @@ export const handler = async (
     ResponseHandler.logRequest(event, context);
 
     // Basic health checks
-    const healthData: HealthCheckResponse = {
+    const healthData: HealthResponse = {
       status: 'healthy',
       timestamp: new Date().toISOString(),
       environment: process.env.ENVIRONMENT || 'unknown',

@@ -253,9 +253,9 @@ The `AcornPupsReceiverPolicy` enforces minimal security principles:
   - Device health, battery, connectivity status
   - Processed by `update-device-status` Lambda function
 
-- **Reset Notifications**: `acorn-pups/commands/{deviceId}/reset`
-  - Factory reset initiated from device
-  - Processed by `factory-reset` Lambda function
+- **Device Commands**: `acorn-pups/commands/{deviceId}`
+  - General device commands and control
+  - Reserved for future functionality
 
 ### Cloud-to-Device Topics (Subscribe)
 
@@ -279,7 +279,7 @@ The `AcornPupsReceiverPolicy` enforces minimal security principles:
 
 ### IoT Device Management Role
 
-Used by: `register-device`, `reset-device`, `factory-reset`
+Used by: `register-device` (with Echo/Nest reset security pattern)
 
 **Permissions**:
 - `iot:CreateKeysAndCertificate`
