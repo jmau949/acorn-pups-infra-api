@@ -1,8 +1,9 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import { IoTClient, CreateKeysAndCertificateCommand, CreateThingCommand, AttachPolicyCommand, AttachThingPrincipalCommand, DescribeEndpointCommand, UpdateCertificateCommand, DeleteCertificateCommand, DetachPolicyCommand, DetachThingPrincipalCommand, DeleteThingCommand } from '@aws-sdk/client-iot';
+import { CloudWatchClient, PutMetricDataCommand, StandardUnit } from '@aws-sdk/client-cloudwatch';
 import { v4 as uuidv4 } from 'uuid';
 import ResponseHandler from '../shared/response-handler';
-import { DynamoDBHelper } from '../shared/dynamodb-client';
+import { DynamoDBHelper, DynamoDBError } from '../shared/dynamodb-client';
 import { DeviceMetadata, DeviceSettings, DeviceUser, ValidationError, ApiErrorResponse } from '../shared/types';
 
 // ==== Device Registration Types (specific to this lambda) ====
@@ -42,8 +43,12 @@ interface DeviceConflictResponse extends ApiErrorResponse {
   supportUrl: string;
 }
 
-// Initialize IoT client
+// Initialize AWS clients
 const iotClient = new IoTClient({
+  region: process.env.REGION || 'us-east-1',
+});
+
+const cloudWatchClient = new CloudWatchClient({
   region: process.env.REGION || 'us-east-1',
 });
 
@@ -55,6 +60,8 @@ const iotClient = new IoTClient({
  * - For existing devices: Requires proof of factory reset (new device instance ID + factory_reset state)
  * - Prevents remote takeover by validating physical reset occurred
  * - Automatically handles certificate revocation and ownership transfer
+ * - Includes CloudWatch monitoring for certificate cleanup failures
+ * - Robust transaction handling with proper rollback mechanisms
  */
 export const handler = async (
   event: APIGatewayProxyEvent,
@@ -194,26 +201,15 @@ export const handler = async (
 
     const now = new Date().toISOString();
     let ownershipTransferred = false;
+    let oldCertificateArn: string | undefined;
 
     // Handle ownership transfer if this is a valid reset
     if (existingDevices && existingDevices.length > 0 && deviceState === 'factory_reset') {
       const existingDevice = existingDevices[0] as DeviceMetadata;
       ownershipTransferred = true;
+      oldCertificateArn = existingDevice.iot_certificate_arn;
       
       console.log(`Processing ownership transfer for device: ${existingDevice.device_id}`);
-      
-      // Step 1: Revoke old certificates
-      if (existingDevice.iot_certificate_arn) {
-        await revokeOldCertificate(existingDevice.iot_certificate_arn, existingDevice.iot_thing_name);
-      }
-      
-      // Step 2: Remove all existing user associations
-      const oldDeviceUsers = await DynamoDBHelper.getDeviceUsers(existingDevice.device_id);
-      console.log(`Removing ${oldDeviceUsers.length} existing user associations`);
-      
-      // Step 3: Remove all pending invitations
-      const oldInvitations = await DynamoDBHelper.getDeviceInvitations(existingDevice.device_id);
-      console.log(`Removing ${oldInvitations.length} pending invitations`);
     }
 
     // Generate device UUID (use existing device_id if transferring ownership)
@@ -275,15 +271,24 @@ export const handler = async (
       throw new Error('Failed to get IoT endpoint');
     }
 
-    // Prepare transaction operations
+    // Prepare transaction operations with improved resilience
     const transactionOperations = [];
     
-    // If transferring ownership, clean up old associations first
+    // If transferring ownership, prepare complete cleanup operations
     if (ownershipTransferred && existingDevices && existingDevices.length > 0) {
       const existingDevice = existingDevices[0] as DeviceMetadata;
       
-      // Remove old device users
-      const oldDeviceUsers = await DynamoDBHelper.getDeviceUsers(existingDevice.device_id);
+      console.log('Preparing complete device cleanup for ownership transfer...');
+      
+      // Get all data that needs cleanup
+      const [oldDeviceUsers, oldInvitations] = await Promise.all([
+        DynamoDBHelper.getDeviceUsers(existingDevice.device_id),
+        DynamoDBHelper.getDeviceInvitations(existingDevice.device_id)
+      ]);
+      
+      console.log(`Found ${oldDeviceUsers.length} users and ${oldInvitations.length} invitations to clean up`);
+      
+      // Remove all old device users
       for (const deviceUser of oldDeviceUsers) {
         transactionOperations.push({
           action: 'Delete' as const,
@@ -292,8 +297,7 @@ export const handler = async (
         });
       }
       
-      // Remove old invitations
-      const oldInvitations = await DynamoDBHelper.getDeviceInvitations(existingDevice.device_id);
+      // Remove all old invitations
       for (const invitation of oldInvitations) {
         transactionOperations.push({
           action: 'Delete' as const,
@@ -301,6 +305,25 @@ export const handler = async (
           key: { PK: `INVITATION#${invitation.invitation_id}`, SK: 'METADATA' },
         });
       }
+      
+      // Remove old device settings (complete cleanup)
+      transactionOperations.push({
+        action: 'Delete' as const,
+        tableParam: 'devices',
+        key: { PK: `DEVICE#${existingDevice.device_id}`, SK: 'SETTINGS' },
+      });
+      
+      // Remove old device status records (complete cleanup)
+      const oldStatusRecords = await DynamoDBHelper.getAllDeviceStatus(existingDevice.device_id);
+      for (const statusRecord of oldStatusRecords) {
+        transactionOperations.push({
+          action: 'Delete' as const,
+          tableParam: 'device-status',
+          key: { PK: `DEVICE#${existingDevice.device_id}`, SK: statusRecord.SK },
+        });
+      }
+      
+      console.log(`Prepared ${transactionOperations.length} cleanup operations`);
     }
 
     // Device metadata record (create or update)
@@ -376,9 +399,46 @@ export const handler = async (
       },
     });
 
-    // Execute all operations atomically
-    console.log('Executing database operations atomically...');
-    await DynamoDBHelper.transactWrite(transactionOperations);
+    // Execute all operations atomically with improved error handling
+    console.log(`Executing ${transactionOperations.length} database operations atomically...`);
+    
+    try {
+      await DynamoDBHelper.transactWrite(transactionOperations);
+      console.log('Database transaction completed successfully');
+    } catch (error) {
+      console.error('Database transaction failed:', error);
+      
+      // Clean up created IoT resources if transaction fails
+      console.log('Cleaning up IoT resources due to transaction failure...');
+      try {
+        if (certResponse.certificateArn) {
+          await cleanupFailedCertificate(certResponse.certificateArn, iotThingName);
+        }
+      } catch (cleanupError) {
+        console.error('Failed to cleanup IoT resources:', cleanupError);
+        // Alert on cleanup failure
+        await sendCloudWatchAlarm('CertificateCleanupFailure', certResponse.certificateArn || 'unknown');
+      }
+      
+      // Re-throw the original transaction error
+      if (error instanceof DynamoDBError) {
+        throw error;
+      }
+      
+      throw new Error(`Database transaction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+
+    // Only revoke old certificate AFTER successful transaction
+    if (ownershipTransferred && oldCertificateArn) {
+      console.log('Transaction successful, proceeding with old certificate cleanup...');
+      const cleanupSuccess = await revokeOldCertificate(oldCertificateArn, `acorn-receiver-${existingDevices![0].device_id}`);
+      
+      if (!cleanupSuccess) {
+        // Alert on certificate cleanup failure but don't fail the registration
+        await sendCloudWatchAlarm('CertificateCleanupFailure', oldCertificateArn);
+        console.warn('Certificate cleanup failed but device registration succeeded');
+      }
+    }
 
     // Prepare response
     const registrationResponse: DeviceRegistrationResponse = {
@@ -418,6 +478,9 @@ export const handler = async (
       } else if (error.message.includes('validation') || error.message.includes('invalid')) {
         statusCode = 400;
         errorMessage = error.message;
+      } else if (error instanceof DynamoDBError) {
+        statusCode = 500;
+        errorMessage = 'Database operation failed';
       }
     }
     
@@ -432,9 +495,106 @@ export const handler = async (
 };
 
 /**
- * Revoke old IoT certificate and clean up IoT resources
+ * Send CloudWatch alarm for certificate cleanup failures
  */
-async function revokeOldCertificate(certificateArn: string, thingName?: string): Promise<void> {
+async function sendCloudWatchAlarm(alarmType: string, certificateArn: string): Promise<void> {
+  try {
+    const metricData = {
+      Namespace: 'AcornPups/DeviceRegistration',
+      MetricData: [
+        {
+          MetricName: alarmType,
+          Value: 1,
+          Unit: StandardUnit.Count,
+          Dimensions: [
+            {
+              Name: 'Environment',
+              Value: process.env.ENVIRONMENT || 'unknown',
+            },
+            {
+              Name: 'CertificateArn',
+              Value: certificateArn,
+            },
+          ],
+          Timestamp: new Date(),
+        },
+      ],
+    };
+
+    await cloudWatchClient.send(new PutMetricDataCommand(metricData));
+    console.log(`CloudWatch alarm sent: ${alarmType} for certificate: ${certificateArn}`);
+  } catch (error) {
+    console.error('Failed to send CloudWatch alarm:', error);
+    // Don't throw - we don't want to fail the operation due to monitoring issues
+  }
+}
+
+/**
+ * Clean up IoT resources for a failed certificate
+ */
+async function cleanupFailedCertificate(certificateArn: string, thingName: string): Promise<void> {
+  console.log(`Cleaning up failed certificate: ${certificateArn}`);
+  
+  try {
+    // Extract certificate ID from ARN
+    const certificateId = certificateArn.split('/').pop();
+    if (!certificateId) {
+      throw new Error('Invalid certificate ARN format');
+    }
+    
+    // Detach policy from certificate
+    const policyName = `AcornPupsReceiverPolicy-${process.env.ENVIRONMENT}`;
+    try {
+      await iotClient.send(new DetachPolicyCommand({
+        policyName: policyName,
+        target: certificateArn,
+      }));
+    } catch (error) {
+      console.warn('Failed to detach policy during cleanup:', error);
+    }
+    
+    // Detach certificate from Thing
+    try {
+      await iotClient.send(new DetachThingPrincipalCommand({
+        thingName: thingName,
+        principal: certificateArn,
+      }));
+    } catch (error) {
+      console.warn('Failed to detach certificate from Thing during cleanup:', error);
+    }
+    
+    // Delete the Thing
+    try {
+      await iotClient.send(new DeleteThingCommand({
+        thingName: thingName,
+      }));
+    } catch (error) {
+      console.warn('Failed to delete Thing during cleanup:', error);
+    }
+    
+    // Mark certificate as INACTIVE
+    await iotClient.send(new UpdateCertificateCommand({
+      certificateId: certificateId,
+      newStatus: 'INACTIVE',
+    }));
+    
+    // Delete the certificate
+    await iotClient.send(new DeleteCertificateCommand({
+      certificateId: certificateId,
+      forceDelete: true,
+    }));
+    
+    console.log('Failed certificate cleanup completed successfully');
+  } catch (error) {
+    console.error('Failed certificate cleanup error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Revoke old IoT certificate and clean up IoT resources with improved resilience
+ */
+async function revokeOldCertificate(certificateArn: string, thingName?: string): Promise<boolean> {
   try {
     console.log(`Revoking old certificate: ${certificateArn}`);
     
@@ -467,6 +627,16 @@ async function revokeOldCertificate(certificateArn: string, thingName?: string):
       } catch (error) {
         console.warn(`Failed to detach certificate from Thing (may already be detached):`, error);
       }
+      
+      // Delete the Thing
+      try {
+        await iotClient.send(new DeleteThingCommand({
+          thingName: thingName,
+        }));
+        console.log(`Deleted Thing: ${thingName}`);
+      } catch (error) {
+        console.warn(`Failed to delete Thing (may already be deleted):`, error);
+      }
     }
     
     // Mark certificate as INACTIVE first
@@ -483,8 +653,10 @@ async function revokeOldCertificate(certificateArn: string, thingName?: string):
     }));
     console.log(`Deleted old certificate: ${certificateId}`);
     
+    return true;
   } catch (error) {
     console.error('Failed to revoke old certificate:', error);
-    // Don't throw - we want registration to continue even if old cert cleanup fails
+    // Return false to indicate failure - caller will handle alerting
+    return false;
   }
 } 

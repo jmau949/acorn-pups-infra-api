@@ -28,6 +28,7 @@
     "npm": ">=10.0.0"
   },
   "devDependencies": {
+    "@aws-sdk/client-cloudwatch": "3.844.0",
     "@aws-sdk/client-dynamodb": "3.844.0",
     "@aws-sdk/client-iot": "^3.844.0",
     "@aws-sdk/client-ssm": "3.844.0",

@@ -1,25 +1,23 @@
 import { Context } from 'aws-lambda';
-import { SNSClient, PublishCommand } from '@aws-sdk/client-sns';
 import { DynamoDBHelper } from '../shared/dynamodb-client';
 import { ButtonPressEvent, DeviceUser, DeviceMetadata } from '../shared/types';
-
-// Initialize SNS client for push notifications
-const snsClient = new SNSClient({
-  region: process.env.REGION || 'us-east-1',
-});
 
 /**
  * Handle Button Press Events
  * 
  * This function is triggered by IoT Core rules when RF buttons are pressed.
- * Processes button presses in real-time and sends push notifications to all authorized users.
+ * Currently processes basic button press validation and logging.
  * 
- * Flow:
- * 1. Extract device ID and button RF ID from MQTT event
- * 2. Query DeviceUsers table to get all authorized users
- * 3. Filter users based on notification permissions and quiet hours
- * 4. Send push notifications via SNS to all authorized users
- * 5. No persistent storage - real-time processing only (MVP behavior)
+ * TODO: Final button press notification design has not been decided yet.
+ * Consider the following options:
+ * 1. Real-time push notifications via SNS
+ * 2. WebSocket-based real-time updates
+ * 3. Persistent event storage for later retrieval
+ * 4. Hybrid approach with immediate + persistent notifications
+ * 5. Integration with third-party notification services
+ * 
+ * Current implementation provides basic event parsing and device validation
+ * as a foundation for the final notification system.
  */
 export const handler = async (event: any, context: Context): Promise<void> => {
   try {
@@ -48,54 +46,41 @@ export const handler = async (event: any, context: Context): Promise<void> => {
     
     console.log(`Found ${deviceUsers.length} users with access to device ${buttonEvent.deviceId}`);
     
-    // Filter users who should receive notifications
-    const notificationUsers = deviceUsers.filter(deviceUser => {
-      // Must be active and have notification permission
-      if (!deviceUser.is_active || !deviceUser.notifications_permission) {
-        return false;
-      }
-      
-      // Must have notifications enabled
-      if (!deviceUser.notifications_enabled) {
-        return false;
-      }
-      
-      // Check quiet hours if enabled
-      if (deviceUser.quiet_hours_enabled) {
-        const now = new Date();
-        const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-        
-        if (isInQuietHours(currentTime, deviceUser.quiet_hours_start, deviceUser.quiet_hours_end)) {
-          console.log(`Skipping notification for user ${deviceUser.user_id} due to quiet hours`);
-          return false;
-        }
-      }
-      
-      return true;
-    });
+    // TODO: Implement notification system based on final design decision
+    // Options to consider:
+    // 1. Push notifications via SNS/FCM
+    // 2. WebSocket real-time updates
+    // 3. Store events for later retrieval
+    // 4. Email notifications
+    // 5. SMS notifications
+    // 6. Third-party integrations (Slack, Discord, etc.)
     
-    console.log(`${notificationUsers.length} users will receive notifications`);
+    // TODO: Implement user preference filtering
+    // Consider user notification preferences:
+    // - notifications_enabled flag
+    // - quiet hours settings
+    // - notification_sound preferences
+    // - custom notification settings
     
-    if (notificationUsers.length === 0) {
-      console.log('No users to notify after filtering');
-      return;
-    }
+    // TODO: Implement rate limiting/cooldown
+    // Prevent notification spam:
+    // - Device-level notification cooldown
+    // - User-level notification preferences
+    // - Time-based rate limiting
     
-    // Send push notifications to all eligible users
-    const notificationPromises = notificationUsers.map(async (deviceUser) => {
-      try {
-        await sendPushNotification(deviceUser, deviceMetadata, buttonEvent);
-        console.log(`Notification sent to user: ${deviceUser.user_id}`);
-      } catch (error) {
-        console.error(`Failed to send notification to user ${deviceUser.user_id}:`, error);
-        // Don't throw - continue processing other users
-      }
-    });
+    // TODO: Implement notification delivery confirmation
+    // Track delivery success/failure:
+    // - Delivery receipts
+    // - Retry mechanisms
+    // - Fallback notification methods
     
-    // Wait for all notifications to be sent
-    await Promise.allSettled(notificationPromises);
+    // TODO: Implement analytics and monitoring
+    // Track button press patterns:
+    // - Frequency analysis
+    // - User engagement metrics
+    // - Device performance monitoring
     
-    console.log(`Button press processing completed for device: ${buttonEvent.deviceId}`);
+    console.log(`Button press processing completed for device: ${buttonEvent.deviceId} (notification system pending final design)`);
     
   } catch (error) {
     console.error('Error handling button press:', error);
@@ -130,100 +115,4 @@ function parseButtonPressEvent(event: any): ButtonPressEvent {
     timestamp: payload.timestamp,
     batteryLevel: payload.batteryLevel,
   };
-}
-
-/**
- * Check if the current time is within quiet hours
- */
-function isInQuietHours(currentTime: string, startTime: string, endTime: string): boolean {
-  // Convert times to minutes for easier comparison
-  const timeToMinutes = (time: string): number => {
-    const [hours, minutes] = time.split(':').map(Number);
-    return hours * 60 + minutes;
-  };
-  
-  const current = timeToMinutes(currentTime);
-  const start = timeToMinutes(startTime);
-  const end = timeToMinutes(endTime);
-  
-  if (start <= end) {
-    // Normal case: start and end are in the same day
-    return current >= start && current <= end;
-  } else {
-    // Quiet hours span midnight
-    return current >= start || current <= end;
-  }
-}
-
-/**
- * Send push notification to a user via SNS
- */
-async function sendPushNotification(
-  deviceUser: DeviceUser, 
-  deviceMetadata: DeviceMetadata, 
-  buttonEvent: ButtonPressEvent
-): Promise<void> {
-  
-  // Build notification message
-  const deviceName = deviceUser.device_nickname || deviceMetadata.device_name;
-  const message = `${deviceName} - Your dog wants to go outside!`;
-  
-  // Build notification payload for mobile apps
-  const notificationPayload = {
-    default: message,
-    APNS: JSON.stringify({
-      aps: {
-        alert: {
-          title: 'Acorn Pups',
-          body: message,
-        },
-        sound: deviceUser.notification_sound === 'silent' ? undefined : 'default',
-        badge: 1,
-      },
-      deviceId: deviceMetadata.device_id,
-      buttonRfId: buttonEvent.buttonRfId,
-      timestamp: buttonEvent.timestamp,
-    }),
-    GCM: JSON.stringify({
-      data: {
-        title: 'Acorn Pups',
-        body: message,
-        deviceId: deviceMetadata.device_id,
-        buttonRfId: buttonEvent.buttonRfId,
-        timestamp: buttonEvent.timestamp,
-      },
-      notification: {
-        title: 'Acorn Pups',
-        body: message,
-        sound: deviceUser.notification_sound === 'silent' ? undefined : 'default',
-      },
-    }),
-  };
-  
-  // Get user's SNS topic ARN (would be stored in user profile or device user relationship)
-  // For now, we'll use a placeholder - in practice this would be the user's device endpoint
-  const topicArn = `arn:aws:sns:${process.env.REGION}:${process.env.AWS_ACCOUNT_ID}:acorn-pups-user-${deviceUser.user_id}`;
-  
-  const publishCommand = new PublishCommand({
-    TopicArn: topicArn,
-    Message: JSON.stringify(notificationPayload),
-    MessageStructure: 'json',
-    Subject: 'Acorn Pups Notification',
-    MessageAttributes: {
-      deviceId: {
-        DataType: 'String',
-        StringValue: deviceMetadata.device_id,
-      },
-      userId: {
-        DataType: 'String',
-        StringValue: deviceUser.user_id,
-      },
-      buttonRfId: {
-        DataType: 'String',
-        StringValue: buttonEvent.buttonRfId,
-      },
-    },
-  });
-  
-  await snsClient.send(publishCommand);
 } 

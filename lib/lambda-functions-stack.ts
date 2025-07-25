@@ -81,6 +81,36 @@ export class LambdaFunctionsStack extends cdk.Stack {
       description: 'IoT & UUID AWS SDK v3 layer (v3.844.0) for device management',
     });
 
+    // **Create CloudWatch Layer with AWS SDK v3.844.0**
+    const cloudWatchLayer = new lambda.LayerVersion(this, 'CloudWatchLayer', {
+      layerVersionName: `acorn-pups-${props.environment}-cloudwatch-layer`,
+      code: lambda.Code.fromAsset('.', {
+        bundling: {
+          image: lambda.Runtime.NODEJS_22_X.bundlingImage,
+          command: [
+            'bash', '-c', 
+            'set -e && ' +
+            'npm config set cache /tmp/.npm --global && ' +
+            'npm cache clean --force && ' +
+            'mkdir -p /asset-output/nodejs && ' +
+            'cd /asset-output/nodejs && ' +
+            'echo \'{"name": "cloudwatch-layer", "version": "1.0.0"}\' > package.json && ' +
+            'npm install --no-fund --no-audit @aws-sdk/client-cloudwatch@3.844.0 && ' +
+            'test -d node_modules/@aws-sdk/client-cloudwatch && ' +
+            'find node_modules -name ".bin" -type d -exec rm -rf {} + 2>/dev/null || true && ' +
+            'find node_modules -name "*.md" -delete 2>/dev/null || true && ' +
+            'find node_modules -name "*.ts" -delete 2>/dev/null || true && ' +
+            'find node_modules -name "*.map" -delete 2>/dev/null || true && ' +
+            'rm -rf node_modules/**/test node_modules/**/tests node_modules/**/examples node_modules/**/docs 2>/dev/null || true && ' +
+            'echo "CloudWatch layer created successfully"'
+          ],
+          user: 'root',
+        },
+      }),
+      compatibleRuntimes: [lambda.Runtime.NODEJS_22_X],
+      description: 'CloudWatch AWS SDK v3 layer (v3.844.0) for monitoring and alerting',
+    });
+
     // Common environment variables for all functions
     const commonEnvironment = {
       ENVIRONMENT: props.environment,
@@ -121,6 +151,19 @@ export class LambdaFunctionsStack extends cdk.Stack {
             'iot:Publish',
           ],
           resources: ['*'], // IoT resources are region-scoped
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: [
+            // CloudWatch Metrics for monitoring certificate cleanup failures
+            'cloudwatch:PutMetricData',
+          ],
+          resources: ['*'], // CloudWatch metrics are region-scoped
+          conditions: {
+            StringEquals: {
+              'cloudwatch:namespace': 'AcornPups/DeviceRegistration',
+            },
+          },
         }),
       ],
     });
@@ -352,7 +395,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
     // Special configuration for functions that need both DynamoDB and IoT layers
     const iotDeviceFunctionProps = {
       ...commonFunctionProps,
-      layers: [dynamoDbLayer, iotLayer],
+      layers: [dynamoDbLayer, iotLayer, cloudWatchLayer],
     };
 
     // Health Check Function (no auth required)
