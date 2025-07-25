@@ -5,6 +5,7 @@ import { ApiGatewayStack } from '../lib/api-gateway-stack';
 import { LambdaFunctionsStack } from '../lib/lambda-functions-stack';
 import { MonitoringStack } from '../lib/monitoring-stack';
 import { PipelineStack } from '../lib/pipeline-stack';
+import { IotPolicyStack } from '../lib/iot-policy-stack';
 
 const app = new cdk.App();
 
@@ -44,7 +45,13 @@ if (!envConfig) {
 }
 
 // Stack naming convention
-const stackPrefix = `acorn-pups-${environment}`;
+const stackPrefix = `acorn-pups-api-${environment}`;
+
+// IoT Policy Stack (deployed first - creates policies needed for device management)
+const iotPolicyStack = new IotPolicyStack(app, `${stackPrefix}-iot-policies`, {
+  env,
+  environment,
+});
 
 // Lambda Functions Stack (contains all Lambda functions)
 const lambdaStack = new LambdaFunctionsStack(app, `${stackPrefix}-lambda`, {
@@ -79,7 +86,8 @@ if (environment === 'prod') {
   });
 }
 
-// Add dependencies
+// Add dependencies to maintain proper deployment order
+lambdaStack.addDependency(iotPolicyStack); // Lambda needs IoT policies for device management
 apiStack.addDependency(lambdaStack);
 monitoringStack.addDependency(apiStack);
 monitoringStack.addDependency(lambdaStack);

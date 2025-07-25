@@ -2,6 +2,9 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import { StackProps } from 'aws-cdk-lib';
 
+// IoT Core constants
+export const IOT_CLIENT_ID_PATTERN = 'acorn-pups-*';
+
 export interface BaseStackProps extends StackProps {
   environment: string;
   apiGatewayStageName: string;
@@ -25,6 +28,10 @@ export interface MonitoringStackProps extends BaseStackProps {
 export interface PipelineStackProps extends StackProps {
   repositoryName: string;
   branch: string;
+}
+
+export interface IotPolicyStackProps extends StackProps {
+  environment: string;
 }
 
 export interface LambdaFunctions {
