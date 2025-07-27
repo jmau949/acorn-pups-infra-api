@@ -66,23 +66,15 @@ export const handler = async (
       return ResponseHandler.badRequest('Invalid userId format', requestId);
     }
 
-    // Get cognito_sub from JWT token for authorization
-    const cognitoSub = event.requestContext.authorizer?.claims?.sub;
-    if (!cognitoSub) {
+    // Get requesting user_id directly from JWT token (Cognito Sub)
+    const requestingUserId = event.requestContext.authorizer?.claims?.sub;
+    if (!requestingUserId) {
       return ResponseHandler.unauthorized('Valid JWT token required', requestId);
     }
 
-    // Look up the requesting user to verify they exist
-    const requestingUsers = await DynamoDBHelper.getUserByCognitoSub(cognitoSub);
-    if (!requestingUsers || requestingUsers.length === 0) {
-      return ResponseHandler.unauthorized('Requesting user not found', requestId);
-    }
-
-    const requestingUser = requestingUsers[0];
-
     // Verify the requesting user has permission to access this user's devices
-    // Allow access if the URL userId matches either the user_id or cognito_sub
-    if (requestingUser.user_id !== userId && requestingUser.cognito_sub !== userId) {
+    // Users can only access their own devices
+    if (requestingUserId !== userId) {
       return ResponseHandler.forbidden('You can only access your own devices', requestId);
     }
 

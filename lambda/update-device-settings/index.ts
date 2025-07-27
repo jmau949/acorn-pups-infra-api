@@ -53,20 +53,11 @@ export const handler = async (
       return ResponseHandler.badRequest('Invalid deviceId format', requestId);
     }
 
-    // Get cognito_sub from JWT token for authorization
-    const cognitoSub = event.requestContext.authorizer?.claims?.sub;
-    if (!cognitoSub) {
+    // Get user_id directly from JWT token (Cognito Sub)
+    const userId = event.requestContext.authorizer?.claims?.sub;
+    if (!userId) {
       return ResponseHandler.unauthorized('Valid JWT token required', requestId);
     }
-
-    // Look up user by cognito_sub
-    const users = await DynamoDBHelper.getUserByCognitoSub(cognitoSub);
-    if (!users || users.length === 0) {
-      return ResponseHandler.unauthorized('User not found', requestId);
-    }
-
-    const user = users[0];
-    const userId = user.user_id;
 
     // Check if device exists
     const deviceMetadata = await DynamoDBHelper.getDeviceMetadata(deviceId) as DeviceMetadata | undefined;

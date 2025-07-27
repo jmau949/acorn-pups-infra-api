@@ -32,7 +32,7 @@ class ResponseHandler {
   }
 
   static getUserId(event: APIGatewayProxyEvent): string | null {
-    // TODO: Extract from JWT token when Cognito integration is complete
+    // Extract user_id directly from JWT token (Cognito Sub)
     return event.requestContext.authorizer?.claims?.sub || null;
   }
 

@@ -32,7 +32,18 @@ export const handler = async (
       return ResponseHandler.badRequest('userId path parameter is required', requestId);
     }
 
-    // TODO: Validate user has permission to view these invitations (from JWT token)
+    // Get requesting user_id directly from JWT token (Cognito Sub)
+    const requestingUserId = event.requestContext.authorizer?.claims?.sub;
+    if (!requestingUserId) {
+      return ResponseHandler.unauthorized('Valid JWT token required', requestId);
+    }
+
+    // Verify the requesting user has permission to view these invitations
+    // Users can only view their own invitations
+    if (requestingUserId !== userId) {
+      return ResponseHandler.forbidden('You can only view your own invitations', requestId);
+    }
+
     // TODO: Query DynamoDB for pending invitations for this user
     // TODO: Filter out expired invitations
 

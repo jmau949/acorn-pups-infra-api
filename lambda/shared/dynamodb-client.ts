@@ -34,7 +34,6 @@ const docClient = DynamoDBDocumentClient.from(dynamoDBClient, {
 const GSI_INDEXES = {
   // Users table indexes
   USERS_EMAIL: 'GSI1',           // email (PK), user_id (SK)
-  USERS_COGNITO_SUB: 'GSI2',     // cognito_sub (PK), user_id (SK)
   // Devices table indexes  
   DEVICES_OWNER: 'GSI1',         // owner_user_id (PK), device_id (SK)
   DEVICES_SERIAL: 'GSI2',        // serial_number (PK), device_id (SK)
@@ -350,18 +349,7 @@ export class DynamoDBHelper {
   // OPTIMIZED QUERY METHODS USING INDEXES - NO SCANS
   // ============================================================
 
-  /**
-   * Get user by Cognito sub ID using GSI2
-   */
-  static async getUserByCognitoSub(cognitoSub: string) {
-    return await this.queryItems(
-      TABLE_PARAMS.USERS,
-      'cognito_sub = :cognitoSub',
-      { ':cognitoSub': cognitoSub },
-      undefined,
-      GSI_INDEXES.USERS_COGNITO_SUB
-    );
-  }
+
 
   /**
    * Get user by email using GSI1

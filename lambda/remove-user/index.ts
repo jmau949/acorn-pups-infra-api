@@ -22,6 +22,12 @@ export const handler = async (
       return ResponseHandler.badRequest('userId path parameter is required', requestId);
     }
 
+    // Get requesting user_id directly from JWT token (Cognito Sub)
+    const requestingUserId = event.requestContext.authorizer?.claims?.sub;
+    if (!requestingUserId) {
+      return ResponseHandler.unauthorized('Valid JWT token required', requestId);
+    }
+
     // TODO: Verify requesting user has permission to remove users from this device (must be owner/admin)
     // TODO: Check if device exists (return 404 if not)
     // TODO: Check if user to be removed exists (return 404 if not)

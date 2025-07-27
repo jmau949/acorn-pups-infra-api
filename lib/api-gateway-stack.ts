@@ -320,18 +320,7 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
-    // POST /v1/devices/{deviceId}/reset
-    const resetResource = deviceResource.addResource('reset');
-    resetResource.addMethod('POST',
-      new apigateway.LambdaIntegration(props.lambdaFunctions.resetDevice, lambdaIntegrationOptions),
-      {
-        methodResponses,
-        requestValidator,
-        authorizer: this.cognitoAuthorizer,
-        authorizationType: apigateway.AuthorizationType.COGNITO,
-        authorizationScopes: ['aws.cognito.signin.user.admin'],
-      }
-    );
+
 
     // POST /v1/devices/{deviceId}/invite
     const inviteResource = deviceResource.addResource('invite');

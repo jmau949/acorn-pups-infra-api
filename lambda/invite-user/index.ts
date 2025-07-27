@@ -57,7 +57,13 @@ export const handler = async (
       return ResponseHandler.badRequest('Email must be between 5 and 254 characters', requestId);
     }
 
-    // TODO: Validate user has permission to invite users to this device (from JWT token)
+    // Get user_id directly from JWT token (Cognito Sub)
+    const userId = event.requestContext.authorizer?.claims?.sub;
+    if (!userId) {
+      return ResponseHandler.unauthorized('Valid JWT token required', requestId);
+    }
+
+    // TODO: Validate user has permission to invite users to this device
     // TODO: Check if device exists in DynamoDB (return 404 if not)
     // TODO: Check if user is already invited or has access (return 409 if they do)
     // TODO: Generate invitation token and store in DynamoDB

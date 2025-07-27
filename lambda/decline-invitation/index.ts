@@ -17,8 +17,14 @@ export const handler = async (
       return ResponseHandler.badRequest('invitationId path parameter is required', requestId);
     }
 
+    // Get user_id directly from JWT token (Cognito Sub)
+    const userId = event.requestContext.authorizer?.claims?.sub;
+    if (!userId) {
+      return ResponseHandler.unauthorized('Valid JWT token required', requestId);
+    }
+
     // TODO: Validate invitation exists and is not expired
-    // TODO: Validate user has permission to decline this invitation (from JWT token)
+    // TODO: Validate user has permission to decline this invitation
     // TODO: Delete invitation from DynamoDB
     // TODO: Send notification to device owner (optional)
 

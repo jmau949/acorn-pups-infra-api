@@ -4,9 +4,8 @@
 export interface User {
   PK: string; // USER#{user_id}
   SK: string; // PROFILE
-  user_id: string;
+  user_id: string; // Cognito Sub UUID used directly as user identifier
   email: string;
-  cognito_sub: string;
   full_name: string;
   phone?: string;
   timezone: string;
