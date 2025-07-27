@@ -47,8 +47,8 @@ export const handler = async (
       return ResponseHandler.badRequest('deviceId path parameter is required', requestId);
     }
 
-    // Validate device ID format
-    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    // Validate device ID format (accept any valid UUID format, not just v4)
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidPattern.test(deviceId)) {
       return ResponseHandler.badRequest('Invalid deviceId format', requestId);
     }

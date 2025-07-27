@@ -60,8 +60,8 @@ export const handler = async (
       return ResponseHandler.badRequest('userId path parameter is required', requestId);
     }
 
-    // Validate UUID format
-    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    // Validate UUID format (accept any valid UUID format, not just v4)
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidPattern.test(userId)) {
       return ResponseHandler.badRequest('Invalid userId format', requestId);
     }
@@ -81,8 +81,8 @@ export const handler = async (
     const requestingUser = requestingUsers[0];
 
     // Verify the requesting user has permission to access this user's devices
-    // For now, users can only access their own devices
-    if (requestingUser.user_id !== userId) {
+    // Allow access if the URL userId matches either the user_id or cognito_sub
+    if (requestingUser.user_id !== userId && requestingUser.cognito_sub !== userId) {
       return ResponseHandler.forbidden('You can only access your own devices', requestId);
     }
 

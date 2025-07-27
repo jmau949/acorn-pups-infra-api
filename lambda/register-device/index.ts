@@ -99,7 +99,7 @@ export const handler = async (
     const deviceNamePattern = /^[\p{L}\p{N}\p{P}\p{Z}]+$/u;
     const serialNumberPattern = /^[\w\-.@#+&(){}[\]/\\|*%$!~`'"<>?=^]+$/;
     const macAddressPattern = /^([0-9A-Fa-f]{2}[:.\-]?){5}[0-9A-Fa-f]{2}$|^[0-9A-Fa-f]{12}$/;
-    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
     if (!deviceIdPattern.test(deviceId)) {
       validationErrors.push({ field: 'deviceId', message: 'Device ID contains invalid characters' });
