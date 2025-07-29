@@ -3,7 +3,7 @@ import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import { StackProps } from 'aws-cdk-lib';
 
 // IoT Core constants
-export const IOT_CLIENT_ID_PATTERN = 'acorn-pups-*';
+export const IOT_CLIENT_ID_PATTERN = 'acorn-receiver-*';
 
 export interface BaseStackProps extends StackProps {
   environment: string;
