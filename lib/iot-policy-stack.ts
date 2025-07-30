@@ -43,7 +43,7 @@ export class IotPolicyStack extends cdk.Stack {
               // Button press events - real-time processing
               `arn:aws:iot:${this.region}:${this.account}:topic/acorn-pups/button-press/\${iot:ClientId}`,
               // Device status updates
-              `arn:aws:iot:${this.region}:${this.account}:topic/acorn-pups/status/\${iot:ClientId}`,
+              `arn:aws:iot:${this.region}:${this.account}:topic/acorn-pups/status-response/\${iot:ClientId}`,
               // Device reset notifications (from device to cloud)
               `arn:aws:iot:${this.region}:${this.account}:topic/acorn-pups/commands/\${iot:ClientId}/reset`
             ]
@@ -60,6 +60,8 @@ export class IotPolicyStack extends cdk.Stack {
               // Command topics for device control
               `arn:aws:iot:${this.region}:${this.account}:topic/acorn-pups/commands/\${iot:ClientId}`,
               `arn:aws:iot:${this.region}:${this.account}:topic/acorn-pups/commands/\${iot:ClientId}/reset`,
+              // Status request topic (cloud to device)
+              `arn:aws:iot:${this.region}:${this.account}:topic/acorn-pups/status-request/\${iot:ClientId}`,
               // Firmware update topic
               `arn:aws:iot:${this.region}:${this.account}:topic/acorn-pups/firmware/\${iot:ClientId}`
             ]
@@ -257,7 +259,8 @@ export class IotPolicyStack extends cdk.Stack {
       'MqttTopicStructureParam',
       JSON.stringify({
         buttonPress: 'acorn-pups/button-press/{deviceId}',
-        status: 'acorn-pups/status/{deviceId}',
+        statusResponse: 'acorn-pups/status-response/{deviceId}',
+        statusRequest: 'acorn-pups/status-request/{deviceId}',
         settings: 'acorn-pups/settings/{deviceId}',
         commands: 'acorn-pups/commands/{deviceId}',
         reset: 'acorn-pups/commands/{deviceId}/reset',
