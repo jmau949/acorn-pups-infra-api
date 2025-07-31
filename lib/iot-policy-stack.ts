@@ -50,10 +50,7 @@ export class IotPolicyStack extends cdk.Stack {
           },
           {
             Effect: 'Allow',
-            Action: [
-              'iot:Subscribe',
-              'iot:Receive'
-            ],
+            Action: 'iot:Subscribe',
             Resource: [
               // Settings updates from cloud to device
               `arn:aws:iot:${this.region}:${this.account}:topicfilter/acorn-pups/settings/\${iot:ClientId}`,
@@ -64,6 +61,26 @@ export class IotPolicyStack extends cdk.Stack {
               `arn:aws:iot:${this.region}:${this.account}:topicfilter/acorn-pups/status-request/\${iot:ClientId}`,
               // Firmware update topic
               `arn:aws:iot:${this.region}:${this.account}:topicfilter/acorn-pups/firmware/\${iot:ClientId}`
+            ],
+            Condition: {
+              StringEquals: {
+                'iot:Connection.Thing.IsAttached': 'true'
+              }
+            }
+          },
+          {
+            Effect: 'Allow',
+            Action: 'iot:Receive',
+            Resource: [
+              // Settings updates from cloud to device
+              `arn:aws:iot:${this.region}:${this.account}:topic/acorn-pups/settings/\${iot:ClientId}`,
+              // Command topics for device control
+              `arn:aws:iot:${this.region}:${this.account}:topic/acorn-pups/commands/\${iot:ClientId}`,
+              `arn:aws:iot:${this.region}:${this.account}:topic/acorn-pups/commands/\${iot:ClientId}/reset`,
+              // Status request topic (cloud to device)
+              `arn:aws:iot:${this.region}:${this.account}:topic/acorn-pups/status-request/\${iot:ClientId}`,
+              // Firmware update topic
+              `arn:aws:iot:${this.region}:${this.account}:topic/acorn-pups/firmware/\${iot:ClientId}`
             ],
             Condition: {
               StringEquals: {
