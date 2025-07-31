@@ -56,15 +56,20 @@ export class IotPolicyStack extends cdk.Stack {
             ],
             Resource: [
               // Settings updates from cloud to device
-              `arn:aws:iot:${this.region}:${this.account}:topic/acorn-pups/settings/\${iot:ClientId}`,
+              `arn:aws:iot:${this.region}:${this.account}:topicfilter/acorn-pups/settings/\${iot:ClientId}`,
               // Command topics for device control
-              `arn:aws:iot:${this.region}:${this.account}:topic/acorn-pups/commands/\${iot:ClientId}`,
-              `arn:aws:iot:${this.region}:${this.account}:topic/acorn-pups/commands/\${iot:ClientId}/reset`,
+              `arn:aws:iot:${this.region}:${this.account}:topicfilter/acorn-pups/commands/\${iot:ClientId}`,
+              `arn:aws:iot:${this.region}:${this.account}:topicfilter/acorn-pups/commands/\${iot:ClientId}/reset`,
               // Status request topic (cloud to device)
-              `arn:aws:iot:${this.region}:${this.account}:topic/acorn-pups/status-request/\${iot:ClientId}`,
+              `arn:aws:iot:${this.region}:${this.account}:topicfilter/acorn-pups/status-request/\${iot:ClientId}`,
               // Firmware update topic
-              `arn:aws:iot:${this.region}:${this.account}:topic/acorn-pups/firmware/\${iot:ClientId}`
-            ]
+              `arn:aws:iot:${this.region}:${this.account}:topicfilter/acorn-pups/firmware/\${iot:ClientId}`
+            ],
+            Condition: {
+              StringEquals: {
+                'iot:Connection.Thing.IsAttached': 'true'
+              }
+            }
           },
           {
             Effect: 'Allow',
@@ -258,13 +263,13 @@ export class IotPolicyStack extends cdk.Stack {
     this.parameterHelper.createParameter(
       'MqttTopicStructureParam',
       JSON.stringify({
-        buttonPress: 'acorn-pups/button-press/{deviceId}',
-        statusResponse: 'acorn-pups/status-response/{deviceId}',
-        statusRequest: 'acorn-pups/status-request/{deviceId}',
-        settings: 'acorn-pups/settings/{deviceId}',
-        commands: 'acorn-pups/commands/{deviceId}',
-        reset: 'acorn-pups/commands/{deviceId}/reset',
-        firmware: 'acorn-pups/firmware/{deviceId}'
+        buttonPress: 'acorn-pups/button-press/{clientId}',
+        statusResponse: 'acorn-pups/status-response/{clientId}',
+        statusRequest: 'acorn-pups/status-request/{clientId}',
+        settings: 'acorn-pups/settings/{clientId}',
+        commands: 'acorn-pups/commands/{clientId}',
+        firmware: 'acorn-pups/firmware/{clientId}',
+        clientIdFormat: 'acorn-receiver-{deviceId}'
       }),
       'MQTT topic structure for Acorn Pups system',
       `/acorn-pups/${props.environment}/iot-core/mqtt-topics`
