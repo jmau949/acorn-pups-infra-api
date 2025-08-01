@@ -49,6 +49,7 @@ export interface LambdaFunctions {
   inviteUser: lambda.Function;
   removeUserAccess: lambda.Function;
   getUserInvitations: lambda.Function;
+  registerPushToken: lambda.Function;
   
   // Invitation Management
   acceptInvitation: lambda.Function;

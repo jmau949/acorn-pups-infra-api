@@ -8,6 +8,7 @@ info:
     - Device registration and management with Echo/Nest-style reset security
     - User access control and invitations
     - Device settings and management
+    - Push notification token management for multi-device support
     - Health monitoring
     
     ## Authentication
@@ -33,7 +34,8 @@ info:
     ## System Architecture
     - RF buttons send signals directly to ESP32 receivers (no API involvement)
     - ESP32 receivers process button presses in real-time
-    - Push notifications sent to all authorized users
+    - Push notifications sent to all authorized users via Expo Push Service
+    - Multi-device support with automatic token management
     - No persistent storage of button press events (MVP)
     - User creation handled by Cognito post-confirmation triggers
     - Reset cleanup handled via HTTP registration API (no MQTT reset topics)
@@ -516,6 +518,90 @@ paths:
                       expiresAt: "2024-01-22T10:30:00Z"
                   total: 1
                 requestId: "req-123e4567-e89b-12d3-a456-426614174000"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UserNotFound'
+
+  /users/{userId}/push-tokens:
+    post:
+      summary: Register or update push notification token
+      description: |
+        Register a new push notification token or update an existing one for a user's device.
+        
+        This endpoint implements minimal proactive token management:
+        - Called on app launch when token changes
+        - Called after app installation when user grants notification permissions
+        - Updates existing token if device fingerprint matches
+        - Creates new endpoint record for new devices
+        
+        The device fingerprint ensures stable device identification across token changes.
+      tags:
+        - Push Notifications
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: "user-123e4567-e89b-12d3-a456-426614174000"
+          description: User ID
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/ClientVersion'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PushTokenRequest'
+            example:
+              expoPushToken: "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]"
+              deviceFingerprint: "ios-iPhone15Pro-12345678"
+              platform: "ios"
+              deviceInfo: "iPhone 15 Pro (iOS 17.2)"
+      responses:
+        '200':
+          description: Push token registered or updated successfully
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+            X-API-Version:
+              $ref: '#/components/headers/X-API-Version'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PushTokenResponse'
+              example:
+                data:
+                  userId: "user-123e4567-e89b-12d3-a456-426614174000"
+                  deviceFingerprint: "ios-iPhone15Pro-12345678"
+                  action: "updated"
+                  message: "Push token updated successfully"
+                  tokenChanged: true
+                  isActive: true
+                  registeredAt: "2024-01-15T10:30:00Z"
+                requestId: "req-123e4567-e89b-12d3-a456-426614174000"
+        '400':
+          description: Invalid push token data
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+            X-API-Version:
+              $ref: '#/components/headers/X-API-Version'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+              example:
+                error: "validation_failed"
+                message: "Invalid push token format"
+                requestId: "req-123e4567-e89b-12d3-a456-426614174000"
+                validationErrors:
+                  - field: "expoPushToken"
+                    message: "Invalid Expo push token format"
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1359,6 +1445,87 @@ components:
                 - deviceId
                 - deviceName
 
+    PushTokenRequest:
+      type: object
+      properties:
+        expoPushToken:
+          type: string
+          pattern: '^ExponentPushToken\[.+\]$'
+          description: Expo push notification token
+          example: "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]"
+        deviceFingerprint:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Stable device identifier (platform-model-installationId)
+          example: "ios-iPhone15Pro-12345678"
+        platform:
+          type: string
+          enum: [ios, android]
+          description: Device platform
+          example: "ios"
+        deviceInfo:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Human-readable device information
+          example: "iPhone 15 Pro (iOS 17.2)"
+      required:
+        - expoPushToken
+        - deviceFingerprint
+        - platform
+        - deviceInfo
+
+    PushTokenResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                userId:
+                  type: string
+                  format: uuid
+                  example: "user-123e4567-e89b-12d3-a456-426614174000"
+                deviceFingerprint:
+                  type: string
+                  example: "ios-iPhone15Pro-12345678"
+                action:
+                  type: string
+                  enum: [created, updated, unchanged]
+                  description: Action taken on the push token
+                  example: "updated"
+                message:
+                  type: string
+                  example: "Push token updated successfully"
+                tokenChanged:
+                  type: boolean
+                  description: Whether the token was actually changed
+                  example: true
+                isActive:
+                  type: boolean
+                  description: Whether the endpoint is active
+                  example: true
+                registeredAt:
+                  type: string
+                  format: date-time
+                  example: "2024-01-15T10:30:00Z"
+              required:
+                - userId
+                - deviceFingerprint
+                - action
+                - message
+                - tokenChanged
+                - isActive
+                - registeredAt
+
 tags:
   - name: System
     description: System health
+  - name: Device Management
+    description: Device registration, settings, and management
+  - name: User Management
+    description: User invitations and access control
+  - name: Push Notifications
+    description: Push notification token management

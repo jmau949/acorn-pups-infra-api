@@ -379,6 +379,19 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
+    // POST /v1/users/{userId}/push-tokens
+    const userPushTokensResource = userResource.addResource('push-tokens');
+    userPushTokensResource.addMethod('POST',
+      new apigateway.LambdaIntegration(props.lambdaFunctions.registerPushToken, lambdaIntegrationOptions),
+      {
+        methodResponses,
+        requestValidator,
+        authorizer: this.cognitoAuthorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
+        authorizationScopes: ['aws.cognito.signin.user.admin'],
+      }
+    );
+
     // Invitation management routes - /v1/invitations
     const invitationsResource = v1Resource.addResource('invitations');
     

@@ -1,23 +1,26 @@
 import { Context } from 'aws-lambda';
 import { DynamoDBHelper } from '../shared/dynamodb-client';
 import { ButtonPressEvent, DeviceUser, DeviceMetadata } from '../shared/types';
+import { Expo, ExpoPushMessage, ExpoPushTicket, ExpoPushSuccessTicket } from 'expo-server-sdk';
+
+// Create a new Expo SDK client
+const expo = new Expo();
+
+interface UserEndpoint {
+  user_id: string;
+  device_fingerprint: string;
+  expo_push_token: string;
+  platform: string;
+  device_info: string;
+  is_active: boolean;
+  last_used?: string;
+}
 
 /**
- * Handle Button Press Events
+ * Handle Button Press Events with Expo Push Notifications
  * 
  * This function is triggered by IoT Core rules when RF buttons are pressed.
- * Currently processes basic button press validation and logging.
- * 
- * TODO: Final button press notification design has not been decided yet.
- * Consider the following options:
- * 1. Real-time push notifications via SNS
- * 2. WebSocket-based real-time updates
- * 3. Persistent event storage for later retrieval
- * 4. Hybrid approach with immediate + persistent notifications
- * 5. Integration with third-party notification services
- * 
- * Current implementation provides basic event parsing and device validation
- * as a foundation for the final notification system.
+ * It sends push notifications to all registered devices for authorized users.
  */
 export const handler = async (event: any, context: Context): Promise<void> => {
   try {
@@ -46,41 +49,147 @@ export const handler = async (event: any, context: Context): Promise<void> => {
     
     console.log(`Found ${deviceUsers.length} users with access to device ${buttonEvent.deviceId}`);
     
-    // TODO: Implement notification system based on final design decision
-    // Options to consider:
-    // 1. Push notifications via SNS/FCM
-    // 2. WebSocket real-time updates
-    // 3. Store events for later retrieval
-    // 4. Email notifications
-    // 5. SMS notifications
-    // 6. Third-party integrations (Slack, Discord, etc.)
+    // Filter users with notification permissions and notifications enabled
+    const notificationUsers = deviceUsers.filter(user => 
+      user.notifications_permission && 
+      user.notifications_enabled && 
+      user.is_active
+    );
     
-    // TODO: Implement user preference filtering
-    // Consider user notification preferences:
-    // - notifications_enabled flag
-    // - quiet hours settings
-    // - notification_sound preferences
-    // - custom notification settings
+    if (notificationUsers.length === 0) {
+      console.log('No users have notifications enabled for this device');
+      return;
+    }
     
-    // TODO: Implement rate limiting/cooldown
-    // Prevent notification spam:
-    // - Device-level notification cooldown
-    // - User-level notification preferences
-    // - Time-based rate limiting
+    console.log(`${notificationUsers.length} users have notifications enabled`);
     
-    // TODO: Implement notification delivery confirmation
-    // Track delivery success/failure:
-    // - Delivery receipts
-    // - Retry mechanisms
-    // - Fallback notification methods
+    // Collect all push tokens for notification users
+    const messages: ExpoPushMessage[] = [];
+    const endpointMap = new Map<string, UserEndpoint>();
     
-    // TODO: Implement analytics and monitoring
-    // Track button press patterns:
-    // - Frequency analysis
-    // - User engagement metrics
-    // - Device performance monitoring
+    for (const user of notificationUsers) {
+      try {
+        // Get all active push endpoints for this user
+        const userEndpoints = await DynamoDBHelper.getUserEndpoints(user.user_id) as UserEndpoint[];
+        
+        console.log(`User ${user.user_id} has ${userEndpoints.length} active endpoints`);
+        
+        for (const endpoint of userEndpoints) {
+          // Skip if not a valid Expo push token
+          if (!Expo.isExpoPushToken(endpoint.expo_push_token)) {
+            console.warn(`Invalid Expo push token for user ${user.user_id}, device ${endpoint.device_fingerprint}`);
+            continue;
+          }
+          
+          // Store endpoint for later processing
+          endpointMap.set(endpoint.expo_push_token, endpoint);
+          
+          // Create push message
+          const message: ExpoPushMessage = {
+            to: endpoint.expo_push_token,
+            sound: user.notification_sound === 'silent' ? null : 'default',
+            title: deviceMetadata.device_name || 'Acorn Pups',
+            body: 'Your dog wants to go outside!',
+            data: {
+              deviceId: buttonEvent.deviceId,
+              deviceName: deviceMetadata.device_name,
+              buttonRfId: buttonEvent.buttonRfId,
+              timestamp: buttonEvent.timestamp,
+              batteryLevel: buttonEvent.batteryLevel,
+            },
+            priority: 'high',
+            channelId: 'acorn-pups-notifications',
+          };
+          
+          messages.push(message);
+        }
+      } catch (error) {
+        console.error(`Error getting endpoints for user ${user.user_id}:`, error);
+      }
+    }
     
-    console.log(`Button press processing completed for device: ${buttonEvent.deviceId} (notification system pending final design)`);
+    if (messages.length === 0) {
+      console.log('No valid push tokens found for notification');
+      return;
+    }
+    
+    console.log(`Sending ${messages.length} push notifications`);
+    
+    // Send notifications in chunks (Expo recommends chunks of 100)
+    const chunks = expo.chunkPushNotifications(messages);
+    const tickets: ExpoPushTicket[] = [];
+    
+    for (const chunk of chunks) {
+      try {
+        const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
+        tickets.push(...ticketChunk);
+      } catch (error) {
+        console.error('Error sending notification chunk:', error);
+      }
+    }
+    
+    console.log(`Sent ${tickets.length} push notifications`);
+    
+    // Process tickets for reactive cleanup
+    const now = new Date().toISOString();
+    const updatePromises: Promise<any>[] = [];
+    
+    for (let i = 0; i < tickets.length; i++) {
+      const ticket = tickets[i];
+      const message = messages[i];
+      const endpoint = endpointMap.get(message.to);
+      
+      if (!endpoint) continue;
+      
+      if (ticket.status === 'ok') {
+        // Update last_used timestamp for successful delivery
+        updatePromises.push(
+          DynamoDBHelper.updateItem(
+            'user-endpoints',
+            {
+              PK: `USER#${endpoint.user_id}`,
+              SK: `ENDPOINT#${endpoint.device_fingerprint}`,
+            },
+            'SET last_used = :lastUsed',
+            { ':lastUsed': now }
+          ).catch(error => {
+            console.error(`Error updating last_used for endpoint ${endpoint.device_fingerprint}:`, error);
+          })
+        );
+      } else if (ticket.status === 'error') {
+        console.error(`Notification error for ${endpoint.device_fingerprint}:`, ticket.message);
+        
+        // Handle DeviceNotRegistered errors for reactive cleanup
+        if (ticket.details?.error === 'DeviceNotRegistered') {
+          console.log(`Marking endpoint ${endpoint.device_fingerprint} as inactive due to DeviceNotRegistered error`);
+          
+          updatePromises.push(
+            DynamoDBHelper.updateItem(
+              'user-endpoints',
+              {
+                PK: `USER#${endpoint.user_id}`,
+                SK: `ENDPOINT#${endpoint.device_fingerprint}`,
+              },
+              'SET is_active = :inactive, updated_at = :updatedAt',
+              { 
+                ':inactive': false,
+                ':updatedAt': now 
+              }
+            ).catch(error => {
+              console.error(`Error marking endpoint ${endpoint.device_fingerprint} as inactive:`, error);
+            })
+          );
+        }
+      }
+    }
+    
+    // Wait for all updates to complete
+    if (updatePromises.length > 0) {
+      await Promise.all(updatePromises);
+      console.log(`Updated ${updatePromises.length} endpoints`);
+    }
+    
+    console.log(`Button press processing completed for device: ${buttonEvent.deviceId}`);
     
   } catch (error) {
     console.error('Error handling button press:', error);
@@ -115,4 +224,4 @@ function parseButtonPressEvent(event: any): ButtonPressEvent {
     timestamp: payload.timestamp,
     batteryLevel: payload.batteryLevel,
   };
-} 
+}

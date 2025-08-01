@@ -51,6 +51,7 @@ const TABLE_PARAMS = {
   DEVICE_USERS: 'device-users',
   INVITATIONS: 'invitations',
   DEVICE_STATUS: 'device-status',
+  USER_ENDPOINTS: 'user-endpoints',
 } as const;
 
 // Cache for table names to avoid repeated parameter store calls
@@ -510,6 +511,33 @@ export class DynamoDBHelper {
     return await this.getItem(
       TABLE_PARAMS.DEVICE_USERS,
       { PK: `DEVICE#${deviceId}`, SK: `USER#${userId}` }
+    );
+  }
+
+  /**
+   * Get all push endpoints for a user (main table query)
+   */
+  static async getUserEndpoints(userId: string, activeOnly: boolean = true) {
+    const items = await this.queryItems(
+      TABLE_PARAMS.USER_ENDPOINTS,
+      'PK = :userId',
+      { ':userId': `USER#${userId}` }
+    );
+    
+    if (activeOnly) {
+      return items.filter((item: any) => item.is_active === true);
+    }
+    
+    return items;
+  }
+
+  /**
+   * Get specific push endpoint by device fingerprint (main table query)
+   */
+  static async getUserEndpoint(userId: string, deviceFingerprint: string) {
+    return await this.getItem(
+      TABLE_PARAMS.USER_ENDPOINTS,
+      { PK: `USER#${userId}`, SK: `ENDPOINT#${deviceFingerprint}` }
     );
   }
 } 

@@ -111,6 +111,36 @@ export class LambdaFunctionsStack extends cdk.Stack {
       description: 'CloudWatch AWS SDK v3 layer (v3.844.0) for monitoring and alerting',
     });
 
+    // **Create Expo SDK Layer for Push Notifications**
+    const expoLayer = new lambda.LayerVersion(this, 'ExpoLayer', {
+      layerVersionName: `acorn-pups-${props.environment}-expo-layer`,
+      code: lambda.Code.fromAsset('.', {
+        bundling: {
+          image: lambda.Runtime.NODEJS_22_X.bundlingImage,
+          command: [
+            'bash', '-c', 
+            'set -e && ' +
+            'npm config set cache /tmp/.npm --global && ' +
+            'npm cache clean --force && ' +
+            'mkdir -p /asset-output/nodejs && ' +
+            'cd /asset-output/nodejs && ' +
+            'echo \'{"name": "expo-layer", "version": "1.0.0"}\' > package.json && ' +
+            'npm install --no-fund --no-audit expo-server-sdk@^3.10.0 && ' +
+            'test -d node_modules/expo-server-sdk && ' +
+            'find node_modules -name ".bin" -type d -exec rm -rf {} + 2>/dev/null || true && ' +
+            'find node_modules -name "*.md" -delete 2>/dev/null || true && ' +
+            'find node_modules -name "*.ts" -delete 2>/dev/null || true && ' +
+            'find node_modules -name "*.map" -delete 2>/dev/null || true && ' +
+            'rm -rf node_modules/**/test node_modules/**/tests node_modules/**/examples node_modules/**/docs 2>/dev/null || true && ' +
+            'echo "Expo layer created successfully"'
+          ],
+          user: 'root',
+        },
+      }),
+      compatibleRuntimes: [lambda.Runtime.NODEJS_22_X],
+      description: 'Expo Server SDK layer for push notifications',
+    });
+
     // Common environment variables for all functions
     const commonEnvironment = {
       ENVIRONMENT: props.environment,
@@ -398,6 +428,12 @@ export class LambdaFunctionsStack extends cdk.Stack {
       layers: [dynamoDbLayer, iotLayer, cloudWatchLayer],
     };
 
+    // Configuration for functions that need DynamoDB and Expo layers
+    const expoPushFunctionProps = {
+      ...commonFunctionProps,
+      layers: [dynamoDbLayer, expoLayer],
+    };
+
     // Health Check Function (no auth required)
     this.functions = {
       healthCheck: new lambda.Function(this, 'HealthCheckFunction', {
@@ -483,6 +519,16 @@ export class LambdaFunctionsStack extends cdk.Stack {
         role: baseLambdaRole,
       }),
 
+      registerPushToken: new lambda.Function(this, 'RegisterPushTokenFunction', {
+        ...dynamoDbFunctionProps,
+        functionName: `acorn-pups-${props.environment}-register-push-token`,
+        code: createBundledCode('register-push-token'),
+        handler: 'index.handler',
+        description: 'Register or update push notification token for a user device',
+        timeout: cdk.Duration.seconds(30),
+        role: baseLambdaRole,
+      }),
+
       // Invitation Management Functions
       acceptInvitation: new lambda.Function(this, 'AcceptInvitationFunction', {
         ...dynamoDbFunctionProps,
@@ -504,7 +550,7 @@ export class LambdaFunctionsStack extends cdk.Stack {
 
       // IoT Event Processing Functions
       handleButtonPress: new lambda.Function(this, 'HandleButtonPressFunction', {
-        ...dynamoDbFunctionProps,
+        ...expoPushFunctionProps,
         functionName: `acorn-pups-${props.environment}-handle-button-press`,
         code: createBundledCode('handle-button-press'),
         handler: 'index.handler',
