@@ -186,7 +186,8 @@ export class DynamoDBHelper {
     key: Record<string, any>, 
     updateExpression: string,
     expressionAttributeValues?: Record<string, any>,
-    expressionAttributeNames?: Record<string, string>
+    expressionAttributeNames?: Record<string, string>,
+    conditionExpression?: string
   ) {
     try {
       const tableName = await this.getTableName(tableParam);
@@ -198,6 +199,7 @@ export class DynamoDBHelper {
         UpdateExpression: updateExpression,
         ExpressionAttributeValues: expressionAttributeValues,
         ExpressionAttributeNames: expressionAttributeNames,
+        ConditionExpression: conditionExpression,
         ReturnValues: 'ALL_NEW',
       });
       

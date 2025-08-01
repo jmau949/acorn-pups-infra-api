@@ -51,7 +51,9 @@ export const handler = async (event: DeviceLifecycleEvent, context: Context) => 
           ':isOnline': isOnline,
           ':lastSeen': new Date(timestamp).toISOString(),
           ':updatedAt': new Date().toISOString()
-        }
+        },
+        undefined,
+        'attribute_exists(PK) AND attribute_exists(SK)'
       );
 
       console.log('Device status updated successfully:', {
@@ -80,7 +82,7 @@ export const handler = async (event: DeviceLifecycleEvent, context: Context) => 
       });
       
       // If device doesn't exist, log it but don't fail the lambda
-      if (dbError.name === 'ItemNotFoundError' || dbError.message?.includes('not found')) {
+      if (dbError.name === 'ConditionalCheckFailedException' || dbError.message?.includes('ConditionalCheckFailed')) {
         console.warn('Device not found in database - device may not be registered yet:', {
           deviceId,
           clientId,
