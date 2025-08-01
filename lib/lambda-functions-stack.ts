@@ -513,6 +513,16 @@ export class LambdaFunctionsStack extends cdk.Stack {
         role: notificationRole,
       }),
 
+      handleDeviceLifecycle: new lambda.Function(this, 'HandleDeviceLifecycleFunction', {
+        ...dynamoDbFunctionProps,
+        functionName: `acorn-pups-${props.environment}-handle-device-lifecycle`,
+        code: createBundledCode('handle-device-lifecycle'),
+        handler: 'index.handler',
+        description: 'Process device lifecycle events (connect/disconnect) and update device online status',
+        timeout: cdk.Duration.seconds(30),
+        role: baseLambdaRole,
+      }),
+
       factoryReset: new lambda.Function(this, 'FactoryResetFunction', {
         ...iotDeviceFunctionProps,
         functionName: `acorn-pups-${props.environment}-factory-reset`,
