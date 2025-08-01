@@ -56,6 +56,7 @@ export interface LambdaFunctions {
   
   // IoT Event Processing
   handleButtonPress: lambda.Function;
+  handleVolumeControl: lambda.Function;
   handleDeviceLifecycle: lambda.Function;
   factoryReset: lambda.Function;
 }

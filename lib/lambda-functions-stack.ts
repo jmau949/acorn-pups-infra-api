@@ -513,6 +513,16 @@ export class LambdaFunctionsStack extends cdk.Stack {
         role: notificationRole,
       }),
 
+      handleVolumeControl: new lambda.Function(this, 'HandleVolumeControlFunction', {
+        ...dynamoDbFunctionProps,
+        functionName: `acorn-pups-${props.environment}-handle-volume-control`,
+        code: createBundledCode('handle-volume-control'),
+        handler: 'index.handler',
+        description: 'Process volume control events and update device settings in DynamoDB',
+        timeout: cdk.Duration.seconds(30),
+        role: baseLambdaRole,
+      }),
+
       handleDeviceLifecycle: new lambda.Function(this, 'HandleDeviceLifecycleFunction', {
         ...dynamoDbFunctionProps,
         functionName: `acorn-pups-${props.environment}-handle-device-lifecycle`,
@@ -561,6 +571,13 @@ export class LambdaFunctionsStack extends cdk.Stack {
     // **IoT Integration Resources**
     // Grant IoT service permission to invoke the handle-device-lifecycle lambda
     this.functions.handleDeviceLifecycle.addPermission('AllowIoTInvocation', {
+      principal: new iam.ServicePrincipal('iot.amazonaws.com'),
+      action: 'lambda:InvokeFunction',
+      sourceAccount: this.account,
+    });
+
+    // Grant IoT service permission to invoke the handle-volume-control lambda
+    this.functions.handleVolumeControl.addPermission('AllowIoTInvocation', {
       principal: new iam.ServicePrincipal('iot.amazonaws.com'),
       action: 'lambda:InvokeFunction',
       sourceAccount: this.account,

@@ -42,6 +42,8 @@ export class IotPolicyStack extends cdk.Stack {
             Resource: [
               // Button press events - real-time processing
               `arn:aws:iot:${this.region}:${this.account}:topic/acorn-pups/button-press/\${iot:ClientId}`,
+              // Volume control events - device to cloud
+              `arn:aws:iot:${this.region}:${this.account}:topic/acorn-pups/volume-control/\${iot:ClientId}`,
               // Device status updates
               `arn:aws:iot:${this.region}:${this.account}:topic/acorn-pups/status-response/\${iot:ClientId}`,
               // Device reset notifications (from device to cloud)
@@ -281,6 +283,7 @@ export class IotPolicyStack extends cdk.Stack {
       'MqttTopicStructureParam',
       JSON.stringify({
         buttonPress: 'acorn-pups/button-press/{clientId}',
+        volumeControl: 'acorn-pups/volume-control/{clientId}',
         statusResponse: 'acorn-pups/status-response/{clientId}',
         statusRequest: 'acorn-pups/status-request/{clientId}',
         settings: 'acorn-pups/settings/{clientId}',
