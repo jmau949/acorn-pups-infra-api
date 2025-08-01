@@ -162,6 +162,7 @@ This document details the comprehensive IAM permissions structure for the Acorn 
 - `get-user-invitations`
 - `accept-invitation`
 - `decline-invitation`
+- `handle-device-lifecycle`
 
 **Policies**:
 - AWS Managed: `AWSLambdaBasicExecutionRole`

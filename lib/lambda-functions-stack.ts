@@ -558,6 +558,14 @@ export class LambdaFunctionsStack extends cdk.Stack {
       });
     });
 
+    // **IoT Integration Resources**
+    // Grant IoT service permission to invoke the handle-device-lifecycle lambda
+    this.functions.handleDeviceLifecycle.addPermission('AllowIoTInvocation', {
+      principal: new iam.ServicePrincipal('iot.amazonaws.com'),
+      action: 'lambda:InvokeFunction',
+      sourceAccount: this.account,
+    });
+
     // Create additional stack-level parameters for all IAM roles
     parameterHelper.createParameter(
       'BaseLambdaRoleArn',
