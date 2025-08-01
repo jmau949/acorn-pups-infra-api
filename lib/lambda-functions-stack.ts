@@ -629,6 +629,13 @@ export class LambdaFunctionsStack extends cdk.Stack {
       sourceAccount: this.account,
     });
 
+    // Grant IoT service permission to invoke the handle-button-press lambda
+    this.functions.handleButtonPress.addPermission('AllowIoTInvocation', {
+      principal: new iam.ServicePrincipal('iot.amazonaws.com'),
+      action: 'lambda:InvokeFunction',
+      sourceAccount: this.account,
+    });
+
     // Create additional stack-level parameters for all IAM roles
     parameterHelper.createParameter(
       'BaseLambdaRoleArn',

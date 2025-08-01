@@ -2,8 +2,8 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda
 import { DynamoDBHelper } from '../shared/dynamodb-client';
 import ResponseHandler from '../shared/response-handler';
 
-// Table parameter for DynamoDB operations
-const TABLE_PARAM = 'user-endpoints';
+// Table parameter for DynamoDB operations  
+const TABLE_PARAM = 'user-endpoints'; // Uses parameter store path, not the constant
 
 interface PushTokenRequest {
   expoPushToken: string;

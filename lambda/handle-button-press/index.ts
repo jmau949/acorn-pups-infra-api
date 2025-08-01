@@ -1,7 +1,7 @@
 import { Context } from 'aws-lambda';
 import { DynamoDBHelper } from '../shared/dynamodb-client';
 import { ButtonPressEvent, DeviceUser, DeviceMetadata } from '../shared/types';
-import { Expo, ExpoPushMessage, ExpoPushTicket, ExpoPushSuccessTicket } from 'expo-server-sdk';
+import { Expo, ExpoPushMessage, ExpoPushTicket } from 'expo-server-sdk';
 
 // Create a new Expo SDK client
 const expo = new Expo();
