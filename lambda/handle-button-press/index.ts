@@ -65,7 +65,7 @@ export const handler = async (event: any, context: Context): Promise<void> => {
     
     // Collect all push tokens for notification users
     const messages: ExpoPushMessage[] = [];
-    const endpointMap = new Map<string, UserEndpoint>();
+    const tokenToEndpointMap = new Map<string, UserEndpoint>();
     
     for (const user of notificationUsers) {
       try {
@@ -81,12 +81,12 @@ export const handler = async (event: any, context: Context): Promise<void> => {
             continue;
           }
           
-          // Store endpoint for later processing
-          endpointMap.set(endpoint.expo_push_token, endpoint);
+          // Store endpoint mapping for later processing
+          tokenToEndpointMap.set(endpoint.expo_push_token, endpoint);
           
-          // Create push message
+          // Create push message with single token (this is the recommended approach for tracking)
           const message: ExpoPushMessage = {
-            to: endpoint.expo_push_token,
+            to: endpoint.expo_push_token, // Always a single string in our implementation
             sound: user.notification_sound === 'silent' ? null : 'default',
             title: deviceMetadata.device_name || 'Acorn Pups',
             body: 'Your dog wants to go outside!',
@@ -123,8 +123,21 @@ export const handler = async (event: any, context: Context): Promise<void> => {
       try {
         const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
         tickets.push(...ticketChunk);
+        console.log(`Successfully sent chunk of ${chunk.length} notifications`);
       } catch (error) {
-        console.error('Error sending notification chunk:', error);
+        console.error('Error sending notification chunk:', {
+          error,
+          chunkSize: chunk.length,
+          errorMessage: error instanceof Error ? error.message : 'Unknown error'
+        });
+        // Add error tickets for failed chunks so we can still process other chunks
+        for (let i = 0; i < chunk.length; i++) {
+          tickets.push({
+            status: 'error',
+            message: `Failed to send chunk: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            details: { error: 'ExpoError' }
+          });
+        }
       }
     }
     
@@ -134,35 +147,29 @@ export const handler = async (event: any, context: Context): Promise<void> => {
     const now = new Date().toISOString();
     const updatePromises: Promise<any>[] = [];
     
+    // Process delivery receipts with robust token handling
     for (let i = 0; i < tickets.length; i++) {
       const ticket = tickets[i];
       const message = messages[i];
-      const endpoint = endpointMap.get(message.to);
       
-      if (!endpoint) continue;
+      // Handle both single tokens and arrays (production-grade approach)
+      const tokens = Array.isArray(message.to) ? message.to : [message.to];
       
-      if (ticket.status === 'ok') {
-        // Update last_used timestamp for successful delivery
-        updatePromises.push(
-          DynamoDBHelper.updateItem(
-            'user-endpoints',
-            {
-              PK: `USER#${endpoint.user_id}`,
-              SK: `ENDPOINT#${endpoint.device_fingerprint}`,
-            },
-            'SET last_used = :lastUsed',
-            { ':lastUsed': now }
-          ).catch(error => {
-            console.error(`Error updating last_used for endpoint ${endpoint.device_fingerprint}:`, error);
-          })
-        );
-      } else if (ticket.status === 'error') {
-        console.error(`Notification error for ${endpoint.device_fingerprint}:`, ticket.message);
+      for (const pushToken of tokens) {
+        // Validate token format
+        if (!pushToken || typeof pushToken !== 'string') {
+          console.error('Invalid push token format:', typeof pushToken);
+          continue;
+        }
         
-        // Handle DeviceNotRegistered errors for reactive cleanup
-        if (ticket.details?.error === 'DeviceNotRegistered') {
-          console.log(`Marking endpoint ${endpoint.device_fingerprint} as inactive due to DeviceNotRegistered error`);
-          
+        const endpoint = tokenToEndpointMap.get(pushToken);
+        if (!endpoint) {
+          console.warn(`No endpoint found for token ${pushToken.substring(0, 20)}...`);
+          continue;
+        }
+        
+        if (ticket.status === 'ok') {
+          // Update last_used timestamp for successful delivery
           updatePromises.push(
             DynamoDBHelper.updateItem(
               'user-endpoints',
@@ -170,15 +177,50 @@ export const handler = async (event: any, context: Context): Promise<void> => {
                 PK: `USER#${endpoint.user_id}`,
                 SK: `ENDPOINT#${endpoint.device_fingerprint}`,
               },
-              'SET is_active = :inactive, updated_at = :updatedAt',
-              { 
-                ':inactive': false,
-                ':updatedAt': now 
-              }
+              'SET last_used = :lastUsed',
+              { ':lastUsed': now }
             ).catch(error => {
-              console.error(`Error marking endpoint ${endpoint.device_fingerprint} as inactive:`, error);
+              console.error(`Error updating last_used for endpoint ${endpoint.device_fingerprint}:`, error);
             })
           );
+        } else if (ticket.status === 'error') {
+          const errorType = ticket.details?.error || 'UnknownError';
+          console.error(`Notification error for ${endpoint.device_fingerprint}:`, {
+            message: ticket.message,
+            errorType,
+            deviceInfo: endpoint.device_info,
+            platform: endpoint.platform
+          });
+          
+          // Handle different types of errors appropriately
+          if (errorType === 'DeviceNotRegistered') {
+            console.log(`Marking endpoint ${endpoint.device_fingerprint} as inactive due to DeviceNotRegistered error`);
+            
+            updatePromises.push(
+              DynamoDBHelper.updateItem(
+                'user-endpoints',
+                {
+                  PK: `USER#${endpoint.user_id}`,
+                  SK: `ENDPOINT#${endpoint.device_fingerprint}`,
+                },
+                'SET is_active = :inactive, updated_at = :updatedAt',
+                { 
+                  ':inactive': false,
+                  ':updatedAt': now 
+                }
+              ).catch(error => {
+                console.error(`Error marking endpoint ${endpoint.device_fingerprint} as inactive:`, error);
+              })
+            );
+          } else if (errorType === 'InvalidCredentials') {
+            console.warn(`Invalid credentials for endpoint ${endpoint.device_fingerprint} - may need token refresh`);
+          } else if (errorType === 'MessageTooBig') {
+            console.error(`Message too big for endpoint ${endpoint.device_fingerprint} - check message content`);
+          } else if (errorType === 'MessageRateExceeded') {
+            console.warn(`Rate limit exceeded for endpoint ${endpoint.device_fingerprint} - backing off`);
+          } else {
+            console.error(`Unhandled error type ${errorType} for endpoint ${endpoint.device_fingerprint}`);
+          }
         }
       }
     }
